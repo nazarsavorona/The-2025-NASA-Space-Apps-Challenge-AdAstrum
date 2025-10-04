@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exoplanet Visualizer</title>
+    <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>🌍 Exoplanet & Star System Visualizer</h1>
+            <p>Explore exoplanets and their host stars using real NASA data</p>
+        </header>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="planet-select">Select Planet/System:</label>
+                <select id="planet-select">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="view-mode">View Mode:</label>
+                <select id="view-mode">
+                    <option value="planet">Single Planet</option>
+                    <option value="system">Star System</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <button id="animate-btn" class="btn">▶️ Play Animation</button>
+                <button id="reset-btn" class="btn">🔄 Reset View</button>
+            </div>
+        </div>
+        
+        <div id="visualization-container">
+            <canvas id="main-container"></canvas>
+        </div>
+        
+        <div id="info-panel">
+            <h2>Planet Information</h2>
+            <div id="planet-info">
+                <p>Select a planet to view details</p>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>

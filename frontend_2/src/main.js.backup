@@ -1,0 +1,273 @@
+import Spacekit from 'spacekit.js';
+
+// Configuration
+const BACKEND_URL = 'http://localhost:8000';
+const AU_TO_KM = 149597870.7; // 1 AU in kilometers
+
+// State
+let simulation = null;
+let planetsData = [];
+let currentViewMode = 'planet';
+let isAnimating = true;
+
+// Initialize the application
+async function init() {
+    try {
+        // Fetch planets data from backend
+        const response = await fetch(`${BACKEND_URL}/planets`);
+        planetsData = await response.json();
+        
+        // Populate planet selector
+        populatePlanetSelector();
+        
+        // Initialize Spacekit simulation
+        initializeSimulation();
+        
+        // Setup event listeners
+        setupEventListeners();
+        
+        // Load first planet
+        if (planetsData.length > 0) {
+            loadPlanet(planetsData[0]);
+        }
+    } catch (error) {
+        console.error('Failed to initialize:', error);
+        alert('Failed to load planet data. Make sure the backend server is running on port 8000.');
+    }
+}
+
+// Populate the planet selector dropdown
+function populatePlanetSelector() {
+    const select = document.getElementById('planet-select');
+    select.innerHTML = planetsData.map(planet => 
+        `<option value="${planet.id}">${planet.name}</option>`
+    ).join('');
+}
+
+// Initialize Spacekit simulation
+function initializeSimulation() {
+    const container = document.getElementById('main-container');
+    
+    simulation = new Spacekit.Simulation(container, {
+        basePath: '/node_modules/spacekit.js/src',
+        jdPerSecond: 0.1, // Slow down simulation time
+        startDate: new Date(),
+        camera: {
+            position: [0, 0, 3],
+            enableDrift: false,
+        },
+        maxNumParticles: 2 ** 16,
+    });
+    
+    // Add stars background
+    simulation.createStars();
+    
+    // Add ambient light
+    simulation.createAmbientLight();
+}
+
+// Calculate semi-major axis from orbital period using Kepler's third law
+// Simplified version assuming circular orbit and star mass = 1 solar mass
+function calculateSemiMajorAxis(orbitalPeriodDays) {
+    // P^2 = a^3 (in AU and years for solar-mass stars)
+    const periodYears = orbitalPeriodDays / 365.25;
+    const semiMajorAxisAU = Math.pow(periodYears, 2/3);
+    return semiMajorAxisAU;
+}
+
+// Calculate star size based on typical star types
+function getStarRadius(starName) {
+    // Simplified star classifications
+    if (starName.includes('TRAPPIST')) return 0.12; // Red dwarf
+    if (starName.includes('GJ')) return 0.21; // Red dwarf
+    if (starName.includes('Kepler')) return 0.95; // Sun-like
+    return 1.0; // Default to solar radius
+}
+
+// Get star color based on temperature or type
+function getStarColor(starName) {
+    if (starName.includes('TRAPPIST') || starName.includes('GJ')) {
+        return 0xff6b4a; // Red dwarf - reddish
+    }
+    if (starName.includes('Kepler')) {
+        return 0xffdd88; // Sun-like - yellowish
+    }
+    return 0xffffdd; // Default - white-yellow
+}
+
+// Load and display a single planet
+function loadPlanet(planetData) {
+    if (!simulation) return;
+    
+    // Clear existing objects
+    simulation.removeObject('star');
+    simulation.removeObject('planet');
+    
+    const semiMajorAxisAU = calculateSemiMajorAxis(planetData.orbitalPeriodDays);
+    const planetRadiusAU = (planetData.radiusEarth * 6371) / AU_TO_KM; // Convert to AU
+    
+    if (currentViewMode === 'system') {
+        // Create star system view
+        const starRadius = getStarRadius(planetData.hostStar);
+        const starColor = getStarColor(planetData.hostStar);
+        
+        // Add the host star
+        const star = simulation.createSphere('star', {
+            position: [0, 0, 0],
+            radius: starRadius * 0.1, // Scale down for visibility
+            color: starColor,
+            textureUrl: null,
+        });
+        
+        // Add point light at star position
+        simulation.createLight([0, 0, 0]);
+        
+        // Add the planet with orbital path
+        const planet = simulation.createSphere('planet', {
+            position: [semiMajorAxisAU, 0, 0],
+            radius: Math.max(planetRadiusAU * 10, 0.05), // Scale up planets for visibility
+            textureUrl: planetData.texture ? `${BACKEND_URL}${planetData.texture}` : null,
+            color: planetData.texture ? null : 0x4488ff,
+            particleSize: 5,
+        });
+        
+        // Add orbital path
+        simulation.createOrbit({
+            ephem: {
+                a: semiMajorAxisAU,
+                e: 0.01, // Assume near-circular orbit
+                i: 0,
+                om: 0,
+                w: 0,
+                ma: 0,
+            },
+            options: {
+                color: 0x888888,
+                eclipticLineColor: 0x333333,
+            },
+        });
+        
+        // Set camera to view the system
+        simulation.getViewer().camera.position.set(
+            semiMajorAxisAU * 2,
+            semiMajorAxisAU * 1.5,
+            semiMajorAxisAU * 2
+        );
+        simulation.getViewer().camera.lookAt(0, 0, 0);
+        
+    } else {
+        // Single planet view
+        const planet = simulation.createSphere('planet', {
+            position: [0, 0, 0],
+            radius: Math.max(planetRadiusAU * 50, 0.2), // Scale up for close view
+            textureUrl: planetData.texture ? `${BACKEND_URL}${planetData.texture}` : null,
+            color: planetData.texture ? null : 0x4488ff,
+            rotation: {
+                enable: true,
+                speed: 0.5,
+            },
+        });
+        
+        // Add light source
+        simulation.createLight([5, 5, 5]);
+        
+        // Set camera for close-up view
+        simulation.getViewer().camera.position.set(0, 0, 2);
+        simulation.getViewer().camera.lookAt(0, 0, 0);
+    }
+    
+    // Update info panel
+    updateInfoPanel(planetData);
+}
+
+// Update the information panel
+function updateInfoPanel(planetData) {
+    const infoDiv = document.getElementById('planet-info');
+    
+    infoDiv.innerHTML = `
+        <div class="info-item">
+            <strong>Name:</strong>
+            <span>${planetData.name}</span>
+        </div>
+        <div class="info-item">
+            <strong>Host Star:</strong>
+            <span>${planetData.hostStar}</span>
+        </div>
+        <div class="info-item">
+            <strong>Discovery Year:</strong>
+            <span>${planetData.discoveryYear}</span>
+        </div>
+        <div class="info-item">
+            <strong>Distance:</strong>
+            <span>${planetData.distance.toFixed(1)} light-years</span>
+        </div>
+        <div class="info-item">
+            <strong>Mass:</strong>
+            <span>${planetData.massEarth.toFixed(2)} Earth masses</span>
+        </div>
+        <div class="info-item">
+            <strong>Radius:</strong>
+            <span>${planetData.radiusEarth.toFixed(2)} Earth radii</span>
+        </div>
+        <div class="info-item">
+            <strong>Orbital Period:</strong>
+            <span>${planetData.orbitalPeriodDays.toFixed(1)} days</span>
+        </div>
+        <div class="info-item">
+            <strong>Temperature:</strong>
+            <span>${planetData.equilibriumTemperatureK}K (${(planetData.equilibriumTemperatureK - 273.15).toFixed(1)}°C)</span>
+        </div>
+        <div class="info-item description">
+            <strong>Description:</strong>
+            <span>${planetData.description}</span>
+        </div>
+    `;
+}
+
+// Setup event listeners
+function setupEventListeners() {
+    // Planet selector
+    document.getElementById('planet-select').addEventListener('change', (e) => {
+        const planetId = e.target.value;
+        const planet = planetsData.find(p => p.id === planetId);
+        if (planet) {
+            loadPlanet(planet);
+        }
+    });
+    
+    // View mode selector
+    document.getElementById('view-mode').addEventListener('change', (e) => {
+        currentViewMode = e.target.value;
+        const selectedPlanetId = document.getElementById('planet-select').value;
+        const planet = planetsData.find(p => p.id === selectedPlanetId);
+        if (planet) {
+            loadPlanet(planet);
+        }
+    });
+    
+    // Animate button
+    document.getElementById('animate-btn').addEventListener('click', () => {
+        isAnimating = !isAnimating;
+        const btn = document.getElementById('animate-btn');
+        
+        if (isAnimating) {
+            simulation.start();
+            btn.textContent = '⏸️ Pause Animation';
+        } else {
+            simulation.stop();
+            btn.textContent = '▶️ Play Animation';
+        }
+    });
+    
+    // Reset button
+    document.getElementById('reset-btn').addEventListener('click', () => {
+        const selectedPlanetId = document.getElementById('planet-select').value;
+        const planet = planetsData.find(p => p.id === selectedPlanetId);
+        if (planet) {
+            loadPlanet(planet);
+        }
+    });
+}
+
+// Start the application
+init();
