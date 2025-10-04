@@ -1,18 +1,79 @@
 import logging
 from io import BytesIO
-from typing import Dict
+from typing import Dict, Optional
 
 import aiofiles
 import pandas as pd
 from fastapi import APIRouter, FastAPI, UploadFile, HTTPException, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
+from pydantic import BaseModel, Field
 
-from model_api_mock import call_model
+from model_api import call_model
 from preprocess import get_dataframe_format
 import uuid
 
 from utils import write_json, read_json
+
+
+# Pydantic models for request/response validation
+class Hyperparams(BaseModel):
+    """Hyperparameters for prediction thresholds."""
+    candidate_threshold: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Threshold for candidate classification (0-1)"
+    )
+    confirmed_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Threshold for confirmed classification (0-1)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "candidate_threshold": 0.4,
+                "confirmed_threshold": 0.7
+            }
+        }
+
+
+class PredictionRequest(BaseModel):
+    """Request model for AI prediction endpoint."""
+    format: str = Field(
+        ...,
+        description="Dataset format: 'kepler', 'k2', or 'toi'"
+    )
+    data: list = Field(
+        ...,
+        description="List of records (JSON format) or CSV content"
+    )
+    hyperparams: Hyperparams = Field(
+        default_factory=lambda: Hyperparams(),
+        description="Prediction hyperparameters"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "format": "kepler",
+                "data": [
+                    {
+                        "koi_period": 3.52,
+                        "koi_prad": 1.5,
+                        "koi_steff": 5700
+                    }
+                ],
+                "hyperparams": {
+                    "candidate_threshold": 0.4,
+                    "confirmed_threshold": 0.7
+                }
+            }
+        }
+
 
 def exoplanets_file(session_name: str):
     return f"dynamic/{session_name}-exoplanets.csv"
@@ -155,3 +216,157 @@ async def test_endpoint(file: UploadFile | None, hyperparams: dict | None=None):
             detail=exs
         )
     return call_model(data_format, df, hyperparams)
+
+
+@app.post("/api/predict/")
+async def predict_endpoint(request: PredictionRequest):
+    """
+    AI Model Prediction Endpoint
+    
+    Accepts JSON or CSV data and returns exoplanet classification predictions.
+    
+    Args:
+        request: PredictionRequest with format, data, and hyperparams
+        
+    Returns:
+        JSON response with predictions and summary statistics
+        
+    Example:
+        POST /api/predict/
+        {
+            "format": "kepler",
+            "data": [...],
+            "hyperparams": {
+                "candidate_threshold": 0.4,
+                "confirmed_threshold": 0.7
+            }
+        }
+    """
+    try:
+        # Convert request data to DataFrame
+        df = pd.DataFrame(request.data)
+        
+        if df.empty:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No data provided in request"
+            )
+        
+        # Validate format
+        format_name = request.format.lower()
+        if format_name not in ["kepler", "k2", "toi"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid format '{request.format}'. Must be one of: kepler, k2, toi"
+            )
+        
+        # Validate hyperparameters
+        hyperparams = request.hyperparams.dict()
+        if hyperparams["confirmed_threshold"] <= hyperparams["candidate_threshold"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="confirmed_threshold must be greater than candidate_threshold"
+            )
+        
+        # Make predictions
+        logger.info(
+            f"Making predictions for {len(df)} records with format '{format_name}'"
+        )
+        result = await call_model(format_name, df, hyperparams)
+        
+        logger.info(
+            f"Predictions completed: {result.get('summary', {})}"
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Prediction error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Prediction failed: {str(e)}"
+        )
+
+
+@app.post("/api/predict/csv/")
+async def predict_csv_endpoint(
+    file: UploadFile,
+    format: str = "kepler",
+    candidate_threshold: float = 0.4,
+    confirmed_threshold: float = 0.7
+):
+    """
+    AI Model Prediction Endpoint for CSV files
+    
+    Accepts a CSV file upload and returns predictions.
+    
+    Args:
+        file: CSV file upload
+        format: Dataset format (kepler, k2, or toi)
+        candidate_threshold: Threshold for candidate classification
+        confirmed_threshold: Threshold for confirmed classification
+        
+    Returns:
+        JSON response with predictions and summary statistics
+    """
+    try:
+        # Validate file type
+        if not file.filename.endswith(".csv"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only CSV files are supported"
+            )
+        
+        # Validate format
+        format_name = format.lower()
+        if format_name not in ["kepler", "k2", "toi"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid format '{format}'. Must be one of: kepler, k2, toi"
+            )
+        
+        # Validate hyperparameters
+        if confirmed_threshold <= candidate_threshold:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="confirmed_threshold must be greater than candidate_threshold"
+            )
+        
+        # Read CSV file
+        contents = await file.read()
+        df = pd.read_csv(BytesIO(contents))
+        
+        if df.empty:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="CSV file is empty"
+            )
+        
+        # Prepare hyperparameters
+        hyperparams = {
+            "candidate_threshold": candidate_threshold,
+            "confirmed_threshold": confirmed_threshold
+        }
+        
+        # Make predictions
+        logger.info(
+            f"Making predictions for {len(df)} records from CSV with format '{format_name}'"
+        )
+        result = await call_model(format_name, df, hyperparams)
+        
+        logger.info(
+            f"CSV predictions completed: {result.get('summary', {})}"
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"CSV prediction error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Prediction failed: {str(e)}"
+        )
