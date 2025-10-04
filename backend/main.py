@@ -1,12 +1,13 @@
 import logging
 from io import BytesIO
+from typing import Dict, Any
 
 import aiofiles
 import pandas as pd
 from fastapi import APIRouter, FastAPI, UploadFile, HTTPException, status
 from pathlib import Path
 
-from model_api import call_model
+from model_api_mock import call_model
 from preprocess import get_dataframe_format
 
 app = FastAPI()
@@ -57,8 +58,7 @@ async def upload(file: UploadFile | None):
             ) from exc
 
 @app.post("/predict/")
-async def get_result_for_file():
-    data_format = None
+async def get_result_for_file(hyperparams: Dict[str: Any] | None=None):
     try:
         df = pd.read_csv(USER_FILE)
         data_format = get_dataframe_format(df)
@@ -67,14 +67,12 @@ async def get_result_for_file():
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exs
         )
-    return call_model(data_format, df)
+    return call_model(data_format, df, hyperparams)
 
 @app.post("/run-for-csv/")
-async def get_result_for_file(file: UploadFile | None):
+async def get_result_for_file(file: UploadFile | None, hyperparams: Dict[str: Any] | None=None):
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
-    df = None
-    data_format = None
     try:
         contents = await file.read()
         df = pd.read_csv(BytesIO(contents))
@@ -84,4 +82,4 @@ async def get_result_for_file(file: UploadFile | None):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exs
         )
-    return call_model(data_format, df)
+    return call_model(data_format, df, hyperparams)

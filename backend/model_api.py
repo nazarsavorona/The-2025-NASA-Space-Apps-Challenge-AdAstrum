@@ -1,8 +1,9 @@
+from typing import Dict, Any
 
 import pandas
 import requests
 
-async def call_model(data_format: str, df: pandas.DataFrame):
+async def call_model(data_format: str, df: pandas.DataFrame, hyperparams: Dict[str: Any]):
     url = "localhost:5000/predict"
     payload = {
         "format": data_format,
