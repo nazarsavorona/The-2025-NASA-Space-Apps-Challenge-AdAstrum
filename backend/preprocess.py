@@ -32,5 +32,5 @@ def get_dataframe_format(df: pd.DataFrame) -> str:
         raise Exception("Cannot recognize data format in the CSV file. Kepler, K2 or Tess dataset formats are expected.")
     expected_columns = closest["columns"]
     unmatched_columns = [col for col in expected_columns if col not in dataset_columns]
-    raise Exception(f"Provided input does not match {closest["name"]} format. Missing columns: {", ".join(unmatched_columns)}")
+    raise Exception(f"Provided input does not match {closest['name']} format. Missing columns: {', '.join(unmatched_columns)}")
 
