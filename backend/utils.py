@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 
 from fastapi import HTTPException
 from starlette import status
@@ -48,3 +49,24 @@ def write_csv(file: str, data: list, fieldnames: list):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to write CSV file {file}: {exs}"
         )
+
+def clear_dynamic_folder():
+    """
+        Clears the /dynamic/ folder by removing all files and subdirectories.
+        """
+    dynamic_dir = "/dynamic"
+    if not os.path.exists(dynamic_dir):
+        return {"status": "ok", "message": f"{dynamic_dir} does not exist."}
+
+    try:
+        for filename in os.listdir(dynamic_dir):
+            file_path = os.path.join(dynamic_dir, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        return {"status": "ok", "message": f"Cleared {dynamic_dir}/"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

@@ -10,12 +10,12 @@ def get_dataframe_format(df: pd.DataFrame) -> str:
         "columns": ["koi_prad", "koi_steff", "koi_srad", "koi_slogg"]
     }
 
-    k2_toi = {
-        "name": "K2 or Toi",
+    k2_tess = {
+        "name": "K2 or Tess",
         "id": "k2",
         "columns": ['pl_orbper', 'pl_rade', 'st_teff', 'st_rad', 'st_logg']
     }
-    expected_formats = [kepler, k2_toi]
+    expected_formats = [kepler, k2_tess]
 
     closest = None
     closest_count = 0
