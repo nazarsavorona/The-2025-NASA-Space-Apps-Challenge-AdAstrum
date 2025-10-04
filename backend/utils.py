@@ -51,9 +51,6 @@ def write_csv(file: str, data: list, fieldnames: list):
         )
 
 def clear_dynamic_folder():
-    """
-        Clears the /dynamic/ folder by removing all files and subdirectories.
-        """
     dynamic_dir = "/dynamic"
     if not os.path.exists(dynamic_dir):
         return {"status": "ok", "message": f"{dynamic_dir} does not exist."}

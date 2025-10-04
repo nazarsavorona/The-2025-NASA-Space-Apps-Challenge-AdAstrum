@@ -12,7 +12,7 @@ from model_api_mock import call_model
 from preprocess import get_dataframe_format
 import uuid
 
-from utils import write_json, read_json, clear_dynamic_folder
+from utils import write_json, read_json
 
 def exoplanets_file(session_name: str):
     return f"dynamic/{session_name}-exoplanets.csv"
@@ -25,10 +25,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-@router.delete("/clear-dynamic")
-async def clear_dynamic():
-    clear_dynamic_folder()
 
 @app.middleware("http")
 async def add_session_id(request: Request, call_next):
