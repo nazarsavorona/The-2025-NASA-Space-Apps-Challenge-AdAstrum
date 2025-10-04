@@ -40,6 +40,9 @@ export default function Home() {
         setProgress(Math.min(90, (offset / file.size) * 90));
       }
 
+      // Store the file object in IndexedDB for later use
+      await storage.saveData('csvData', 'originalFile', file);
+
       await storage.saveData('csvData', 'metadata', {
         fileName: file.name,
         fileSize: file.size,
@@ -71,7 +74,7 @@ export default function Home() {
           Upload Your CSV
         </h1>
         <p className="text-center text-gray-400 mt-3 mb-8">
-          Securely upload and process large CSV files. We’ll split it into chunks for smooth editing.
+          Securely upload and process large CSV files. We'll split it into chunks for smooth editing.
         </p>
 
         {error && (

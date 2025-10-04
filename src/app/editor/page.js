@@ -14,6 +14,7 @@ export default function Editor() {
     const rowsPerPage = 50;
     const router = useRouter();
 
+
     useEffect(() => {
         loadCSVData();
     }, []);
@@ -134,13 +135,47 @@ export default function Editor() {
             await storage.saveData('processedData', 'data', data);
             await storage.saveData('processedData', 'columns', columns);
 
-            // Clear original CSV data to free up space
-            await storage.clearStore('csvData');
+            // Get the original file from IndexedDB
+            const originalFile = await storage.getData('csvData', 'originalFile');
 
-            router.push('/classify');
+            if (!originalFile) {
+                alert('Original file not found. Please re-upload your CSV.');
+                setLoading(false);
+                return;
+            }
+
+            // Create FormData and append the file
+            const formData = new FormData();
+            formData.append('file', originalFile);
+
+            try {
+                const response = await fetch("http://0.0.0.0:8001/upload/", {
+                    method: "POST",
+                    body: formData,
+                    credentials: "include"
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('Upload successful:', result);
+
+                // Clear original CSV data to free up space
+                await storage.clearStore('csvData');
+
+                router.push('/classify');
+            } catch (error) {
+                console.error('Error uploading file:', error);
+                alert('Error uploading file: ' + error.message);
+                setLoading(false);
+                return;
+            }
+
         } catch (error) {
             console.error('Error saving data:', error);
-            alert('Error saving data');
+            alert('Error saving data: ' + error.message);
             setLoading(false);
         }
     };
