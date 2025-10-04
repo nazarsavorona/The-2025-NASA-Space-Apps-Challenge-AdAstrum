@@ -128,7 +128,7 @@ MISSION_SPECS = [
     ),
 ]
 
-MODEL_DIR = "models"
+MODEL_DIR = "./assets/models"
 
 
 def iter_csv_records(path: str) -> Iterable[Dict[str, str]]:
