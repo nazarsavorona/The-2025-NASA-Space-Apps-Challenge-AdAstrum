@@ -166,21 +166,19 @@ async def upload(request: Request, file: UploadFile | None):
                 detail="Failed to remove session file"
             ) from exc
 
-@app.post("/hyperparams/")
-async def set_hyperparams(request: Request, hyperparams: Dict):
-    session_id = request.state.session_id
+
+def set_hyperparams(session_id: str, hyperparams: Dict):
     hyperparams_f = hyperparams_file(session_id)
     write_json(hyperparams_f, hyperparams)
     return status.HTTP_201_CREATED
 
 @app.post("/predict/")
-async def get_result_for_file(request: Request):
+async def get_result_for_file(request: Request, hyperparams: Dict):
     session_id = request.state.session_id
+    set_hyperparams(session_id, hyperparams)
     planet_file = exoplanets_file(session_id)
-    hyperparams_f = hyperparams_file(session_id)
     try:
         df = pd.read_csv(planet_file)
-        hyperparams = read_json(hyperparams_f)
     except Exception as exs:
         return HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
