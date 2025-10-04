@@ -55,3 +55,7 @@ data/*/
 # Temporary files
 *.tmp
 *.temp
+
+# Exceptions - keep planet textures
+!planet-viewer/templates/*.png
+!planet-viewer/templates/*.jpg
