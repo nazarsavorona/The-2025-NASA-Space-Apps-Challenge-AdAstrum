@@ -1,6 +1,6 @@
 import logging
 from io import BytesIO
-from typing import Dict, Optional
+from typing import Dict
 
 import aiofiles
 import pandas as pd
@@ -13,7 +13,7 @@ from model_api import call_model
 from preprocess import get_dataframe_format
 import uuid
 
-from utils import write_json, read_json
+from utils import write_json
 
 
 # Pydantic models for request/response validation
@@ -45,7 +45,7 @@ class PredictionRequest(BaseModel):
     """Request model for AI prediction endpoint."""
     format: str = Field(
         ...,
-        description="Dataset format: 'kepler', 'k2', or 'toi'"
+        description="Dataset format: 'kepler', 'k2', or 'tess'"
     )
     data: list = Field(
         ...,
@@ -178,7 +178,7 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
     set_hyperparams(session_id, hyperparams)
     planet_file = exoplanets_file(session_id)
     try:
-        df = pd.read_csv(planet_file)
+        df = pd.read_csv(planet_file, comment="#")
     except Exception as exs:
         return HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -252,10 +252,10 @@ async def predict_endpoint(request: PredictionRequest):
         
         # Validate format
         format_name = request.format.lower()
-        if format_name not in ["kepler", "k2", "toi"]:
+        if format_name not in ["kepler", "k2", "tess"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid format '{request.format}'. Must be one of: kepler, k2, toi"
+                detail=f"Invalid format '{request.format}'. Must be one of: kepler, k2, tess"
             )
         
         # Validate hyperparameters
@@ -297,15 +297,15 @@ async def predict_csv_endpoint(
 ):
     """
     AI Model Prediction Endpoint for CSV files
-    
+
     Accepts a CSV file upload and returns predictions.
-    
+
     Args:
         file: CSV file upload
-        format: Dataset format (kepler, k2, or toi)
+        format: Dataset format (kepler, k2, or tess)
         candidate_threshold: Threshold for candidate classification
         confirmed_threshold: Threshold for confirmed classification
-        
+
     Returns:
         JSON response with predictions and summary statistics
     """
@@ -316,50 +316,50 @@ async def predict_csv_endpoint(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Only CSV files are supported"
             )
-        
+
         # Validate format
         format_name = format.lower()
-        if format_name not in ["kepler", "k2", "toi"]:
+        if format_name not in ["kepler", "k2", "tess"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid format '{format}'. Must be one of: kepler, k2, toi"
+                detail=f"Invalid format '{format}'. Must be one of: kepler, k2, tess"
             )
-        
+
         # Validate hyperparameters
         if confirmed_threshold <= candidate_threshold:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="confirmed_threshold must be greater than candidate_threshold"
             )
-        
+
         # Read CSV file
         contents = await file.read()
         df = pd.read_csv(BytesIO(contents))
-        
+
         if df.empty:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="CSV file is empty"
             )
-        
+
         # Prepare hyperparameters
         hyperparams = {
             "candidate_threshold": candidate_threshold,
             "confirmed_threshold": confirmed_threshold
         }
-        
+
         # Make predictions
         logger.info(
             f"Making predictions for {len(df)} records from CSV with format '{format_name}'"
         )
         result = await call_model(format_name, df, hyperparams)
-        
+
         logger.info(
             f"CSV predictions completed: {result.get('summary', {})}"
         )
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
