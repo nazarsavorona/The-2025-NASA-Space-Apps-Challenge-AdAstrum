@@ -1,33 +1,63 @@
 import logging
 from io import BytesIO
-from typing import Dict, Any
+from typing import Dict
 
 import aiofiles
 import pandas as pd
-from fastapi import APIRouter, FastAPI, UploadFile, HTTPException, status
+from fastapi import APIRouter, FastAPI, UploadFile, HTTPException, status, Request, Response
 from pathlib import Path
 
 from model_api_mock import call_model
 from preprocess import get_dataframe_format
+import uuid
+
+from utils import write_json, read_json
 
 app = FastAPI()
 
-USER_FILE = "dynamic/user-data.csv"
+
+def exoplanets_file(session_name: str):
+    return f"dynamic/{session_name}-exoplanets.csv"
+
+def hyperparams_file(session_name: str):
+    return f"dynamic/{session_name}-hyperparams.json"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+sessions = {}
+
+@app.middleware("http")
+async def add_session_id(request: Request, call_next):
+    session_id = request.cookies.get("session_id")
+
+    if not session_id or session_id not in sessions:
+        session_id = str(uuid.uuid4())
+        sessions[session_id] = {"visits": 0}
+
+    sessions[session_id]["visits"] += 1
+
+    response: Response = await call_next(request)
+
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
+        httponly=True,
+        secure=False,
+        samesite="lax"
+    )
+    return response
 @app.get("/")
 def read_root():
     return {"message": "Hello, AdAstrum!"}
 
 
 @app.post("/upload/")
-async def upload(file: UploadFile | None):
-
-    filepath = Path(USER_FILE)
+async def upload(request: Request, file: UploadFile | None):
+    session_id = request.cookies.get("session_id")
+    filepath = Path(exoplanets_file(session_id))
     if file:
         try:
             async with aiofiles.open(filepath, "wb") as out_file:
@@ -57,10 +87,20 @@ async def upload(file: UploadFile | None):
                 detail="Failed to remove session file"
             ) from exc
 
+async def set_hyperparams(request: Request, hyperparams: Dict):
+    session_id = request.cookies.get("session_id")
+    hyperparams_f = hyperparams_file(session_id)
+    write_json(hyperparams_f, hyperparams)
+    return status.HTTP_201_CREATED
+
 @app.post("/predict/")
-async def get_result_for_file(hyperparams: str | None=None):
+async def get_result_for_file(request: Request):
+    session_id = request.cookies.get("session_id")
+    planet_file = exoplanets_file(session_id)
+    hyperparams_f = hyperparams_file(session_id)
+    hyperparams = read_json(hyperparams_f)
     try:
-        df = pd.read_csv(USER_FILE)
+        df = pd.read_csv(planet_file)
         data_format = get_dataframe_format(df)
     except Exception as exs:
         return HTTPException(
@@ -69,8 +109,15 @@ async def get_result_for_file(hyperparams: str | None=None):
         )
     return call_model(data_format, df, hyperparams)
 
-@app.post("/run-for-csv/")
-async def get_result_for_file(file: UploadFile | None, hyperparams: str | None=None):
+@app.post("/test-endpoint/")
+async def test_endpoint(file: UploadFile | None, hyperparams: dict | None=None):
+
+    if hyperparams is None:
+        hyperparams = {
+            "candidate_threshold": 0.2,
+            "confirmed_threshold": 0.5,
+        }
+
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
     try:
