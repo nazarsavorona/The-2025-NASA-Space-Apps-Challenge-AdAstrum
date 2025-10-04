@@ -1,0 +1,72 @@
+[
+  {
+    "id": "kepler-186f",
+    "name": "Kepler-186 f",
+    "hostStar": "Kepler-186",
+    "status": "Confirmed",
+    "discoveryYear": 2014,
+    "distance": 492.0,
+    "massEarth": 1.1,
+    "radiusEarth": 1.11,
+    "orbitalPeriodDays": 129.9,
+    "equilibriumTemperatureK": 188,
+    "texture": "/textures/rocky.png",
+    "description": "The first Earth-size planet to lie within the habitable zone of its host star, discovered by the Kepler mission."
+  },
+  {
+    "id": "kepler-22b",
+    "name": "Kepler-22 b",
+    "hostStar": "Kepler-22",
+    "status": "Confirmed",
+    "discoveryYear": 2011,
+    "distance": 620.0,
+    "massEarth": 36.0,
+    "radiusEarth": 2.4,
+    "orbitalPeriodDays": 289.9,
+    "equilibriumTemperatureK": 262,
+    "texture": "/textures/tanGasGiant.png",
+    "description": "An ocean candidate planet about 2.4 times the radius of Earth residing in the habitable zone."
+  },
+  {
+    "id": "trappist-1e",
+    "name": "TRAPPIST-1 e",
+    "hostStar": "TRAPPIST-1",
+    "status": "Confirmed",
+    "discoveryYear": 2016,
+    "distance": 39.6,
+    "massEarth": 0.77,
+    "radiusEarth": 0.92,
+    "orbitalPeriodDays": 6.10,
+    "equilibriumTemperatureK": 251,
+    "texture": "/textures/rocky.png",
+    "description": "One of seven Earth-size worlds orbiting the ultra-cool dwarf star TRAPPIST-1, likely rocky and temperate."
+  },
+  {
+    "id": "hd-209458b",
+    "name": "HD 209458 b",
+    "hostStar": "HD 209458",
+    "status": "Confirmed",
+    "discoveryYear": 1999,
+    "distance": 159.0,
+    "massEarth": 220.0,
+    "radiusEarth": 13.9,
+    "orbitalPeriodDays": 3.52,
+    "equilibriumTemperatureK": 1450,
+    "texture": "/textures/blueGasGiant.png",
+    "description": "A well-studied hot Jupiter known for its evaporating atmosphere and first detected transiting exoplanet."
+  },
+  {
+    "id": "gj-1214b",
+    "name": "GJ 1214 b",
+    "hostStar": "GJ 1214",
+    "status": "Confirmed",
+    "discoveryYear": 2009,
+    "distance": 48.0,
+    "massEarth": 6.5,
+    "radiusEarth": 2.7,
+    "orbitalPeriodDays": 1.58,
+    "equilibriumTemperatureK": 552,
+    "texture": "/textures/earth.jpg",
+    "description": "A warm sub-Neptune with a puffy water-rich atmosphere orbiting a nearby red dwarf."
+  }
+]
