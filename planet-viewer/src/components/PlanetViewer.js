@@ -258,12 +258,18 @@ export class PlanetViewer {
                 const templateLoaded = await this._tryLoadTemplate(planetGroup);
                 
                 if (!templateLoaded) {
-                    console.warn('No template found, falling back to sphere');
+                    console.warn('No template texture found, using colored sphere');
                     this._createSpherePlanet(planetGroup);
                 }
             }
         } else {
-            this._createSpherePlanet(planetGroup);
+            // No model specified, try to use template texture first
+            const templateLoaded = await this._tryLoadTemplate(planetGroup);
+            
+            if (!templateLoaded) {
+                console.log('No template texture available, using colored sphere');
+                this._createSpherePlanet(planetGroup);
+            }
         }
 
         // Add atmosphere if specified
@@ -286,55 +292,78 @@ export class PlanetViewer {
     }
 
     /**
-     * Try to load a template from templates folder
+     * Try to load a template texture from templates folder
      * @private
      * @param {THREE.Group} parentGroup - Group to add the template to
      * @returns {Promise<boolean>} True if template was loaded successfully
      */
     async _tryLoadTemplate(parentGroup) {
-        const templates = [
-            'template-earth.json',
-            'template-mars.json',
-            'template-jupiter.json'
+        const availableTextures = [
+            'earth-texture.jpg',
+            'mars-texture.jpg',
+            'jupiter-texture.jpg'
         ];
 
-        // Try to find a matching template based on planet name
+        // Try to find a matching texture based on planet name
         const planetName = (this.planetData.name || '').toLowerCase();
-        let templateFile = null;
+        let textureFile = null;
 
         if (planetName.includes('earth')) {
-            templateFile = 'template-earth.json';
+            textureFile = 'earth-texture.jpg';
         } else if (planetName.includes('mars')) {
-            templateFile = 'template-mars.json';
+            textureFile = 'mars-texture.jpg';
         } else if (planetName.includes('jupiter')) {
-            templateFile = 'template-jupiter.json';
+            textureFile = 'jupiter-texture.jpg';
         } else {
-            // Use first available template as default
-            templateFile = templates[0];
+            // Use random texture as default
+            textureFile = availableTextures[Math.floor(Math.random() * availableTextures.length)];
         }
 
         try {
-            const response = await fetch(`/templates/${templateFile}`);
+            // Try to load the selected texture
+            const textureUrl = `/templates/${textureFile}`;
+            const response = await fetch(textureUrl, { method: 'HEAD' });
+            
             if (!response.ok) {
-                throw new Error(`Template not found: ${templateFile}`);
+                throw new Error(`Texture not found: ${textureFile}`);
             }
 
-            const templateData = await response.json();
-            console.log(`Loaded template: ${templateFile}`);
+            console.log(`Using template texture: ${textureFile}`);
 
-            // Merge template data with existing planet data
-            this.planetData = {
-                ...templateData,
-                ...this.planetData,
-                name: this.planetData.name || templateData.name
-            };
+            // Update planet data with texture URL
+            this.planetData.textureUrl = textureUrl;
+            
+            // Set default radius if not specified
+            if (!this.planetData.radius) {
+                this.planetData.radius = 6;
+            }
 
-            // Create sphere planet with template data
+            // Create sphere planet with texture
             this._createSpherePlanet(parentGroup);
             
             return true;
         } catch (error) {
-            console.error('Failed to load template:', error);
+            console.error('Failed to load template texture:', error);
+            
+            // Try to use any available texture as fallback
+            for (const texture of availableTextures) {
+                try {
+                    const fallbackUrl = `/templates/${texture}`;
+                    const fallbackResponse = await fetch(fallbackUrl, { method: 'HEAD' });
+                    
+                    if (fallbackResponse.ok) {
+                        console.log(`Using fallback texture: ${texture}`);
+                        this.planetData.textureUrl = fallbackUrl;
+                        this.planetData.radius = this.planetData.radius || 6;
+                        this._createSpherePlanet(parentGroup);
+                        return true;
+                    }
+                } catch (e) {
+                    // Continue to next texture
+                    continue;
+                }
+            }
+            
             return false;
         }
     }
