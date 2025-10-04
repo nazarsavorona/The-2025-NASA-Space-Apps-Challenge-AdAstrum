@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Texture Generator</title>
+</head>
+<body>
+    <h1>Generating Planet Textures...</h1>
+    <div id="canvases"></div>
+    
+    <script>
+        const templates = [
+            {
+                name: 'earth',
+                size: 2048,
+                colors: {
+                    ocean: ['#0c5da5', '#0e4c8b', '#1a5fa0'],
+                    land: ['#2d5a3a', '#4a7c59', '#6b9e7a', '#8ab88f'],
+                    ice: ['#ffffff', '#e8f4f8']
+                }
+            },
+            {
+                name: 'mars',
+                size: 2048,
+                colors: {
+                    base: ['#c1440e', '#a83c0d', '#8f320b', '#d64f15'],
+                    dark: ['#5c2408', '#3d1806', '#2a1004'],
+                    light: ['#e5a482', '#d98d6f', '#cc765c']
+                }
+            },
+            {
+                name: 'jupiter',
+                size: 2048,
+                colors: {
+                    bands: [
+                        ['#f4d4b0', '#e8c49c', '#dcb488'],
+                        ['#d89e6f', '#cc8e5b', '#c07e47'],
+                        ['#f8e8d0', '#ecdcc0', '#e0d0b0'],
+                        ['#c0a080', '#b49070', '#a88060']
+                    ]
+                }
+            }
+        ];
+
+        function generateEarthTexture(canvas, colors) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Base ocean
+            ctx.fillStyle = colors.ocean[0];
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add continents (simplified)
+            ctx.fillStyle = colors.land[1];
+            
+            // Noise pattern for land masses
+            for (let i = 0; i < 1000; i++) {
+                const x = Math.random() * width;
+                const y = Math.random() * height;
+                const size = Math.random() * 300 + 100;
+                
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, size);
+                gradient.addColorStop(0, colors.land[Math.floor(Math.random() * colors.land.length)]);
+                gradient.addColorStop(1, 'transparent');
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x - size, y - size, size * 2, size * 2);
+            }
+            
+            // Ice caps
+            const polarGradientTop = ctx.createLinearGradient(0, 0, 0, height * 0.15);
+            polarGradientTop.addColorStop(0, colors.ice[0]);
+            polarGradientTop.addColorStop(1, 'transparent');
+            ctx.fillStyle = polarGradientTop;
+            ctx.fillRect(0, 0, width, height * 0.15);
+            
+            const polarGradientBottom = ctx.createLinearGradient(0, height, 0, height * 0.85);
+            polarGradientBottom.addColorStop(0, colors.ice[0]);
+            polarGradientBottom.addColorStop(1, 'transparent');
+            ctx.fillStyle = polarGradientBottom;
+            ctx.fillRect(0, height * 0.85, width, height * 0.15);
+        }
+
+        function generateMarsTexture(canvas, colors) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Base color
+            ctx.fillStyle = colors.base[0];
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add craters and variations
+            for (let i = 0; i < 2000; i++) {
+                const x = Math.random() * width;
+                const y = Math.random() * height;
+                const size = Math.random() * 80 + 10;
+                const colorSet = Math.random() > 0.5 ? colors.dark : colors.base;
+                
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, size);
+                gradient.addColorStop(0, colorSet[Math.floor(Math.random() * colorSet.length)]);
+                gradient.addColorStop(0.8, colors.base[Math.floor(Math.random() * colors.base.length)]);
+                gradient.addColorStop(1, 'transparent');
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x - size, y - size, size * 2, size * 2);
+            }
+            
+            // Polar ice
+            ctx.fillStyle = 'rgba(255, 220, 200, 0.3)';
+            ctx.fillRect(0, 0, width, height * 0.1);
+            ctx.fillRect(0, height * 0.9, width, height * 0.1);
+        }
+
+        function generateJupiterTexture(canvas, colors) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Create horizontal bands
+            const numBands = colors.bands.length * 3;
+            const bandHeight = height / numBands;
+            
+            for (let i = 0; i < numBands; i++) {
+                const bandColors = colors.bands[i % colors.bands.length];
+                const y = i * bandHeight;
+                
+                // Base band color
+                ctx.fillStyle = bandColors[0];
+                ctx.fillRect(0, y, width, bandHeight);
+                
+                // Add swirls and turbulence
+                for (let j = 0; j < 50; j++) {
+                    const x = Math.random() * width;
+                    const localY = y + Math.random() * bandHeight;
+                    const size = Math.random() * 150 + 50;
+                    
+                    const gradient = ctx.createRadialGradient(x, localY, 0, x, localY, size);
+                    gradient.addColorStop(0, bandColors[Math.floor(Math.random() * bandColors.length)]);
+                    gradient.addColorStop(1, 'transparent');
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x - size, localY - size, size * 2, size * 2);
+                }
+            }
+            
+            // Great Red Spot
+            const spotX = width * 0.3;
+            const spotY = height * 0.4;
+            const spotRadiusX = width * 0.08;
+            const spotRadiusY = height * 0.05;
+            
+            ctx.fillStyle = '#d64f15';
+            ctx.beginPath();
+            ctx.ellipse(spotX, spotY, spotRadiusX, spotRadiusY, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            const spotGradient = ctx.createRadialGradient(spotX, spotY, 0, spotX, spotY, spotRadiusX);
+            spotGradient.addColorStop(0, '#ff6b3f');
+            spotGradient.addColorStop(0.6, '#d64f15');
+            spotGradient.addColorStop(1, 'transparent');
+            ctx.fillStyle = spotGradient;
+            ctx.beginPath();
+            ctx.ellipse(spotX, spotY, spotRadiusX, spotRadiusY, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Generate all textures
+        templates.forEach(template => {
+            const canvas = document.createElement('canvas');
+            canvas.width = template.size;
+            canvas.height = template.size;
+            
+            if (template.name === 'earth') {
+                generateEarthTexture(canvas, template.colors);
+            } else if (template.name === 'mars') {
+                generateMarsTexture(canvas, template.colors);
+            } else if (template.name === 'jupiter') {
+                generateJupiterTexture(canvas, template.colors);
+            }
+            
+            // Convert to downloadable image
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${template.name}-texture.png`;
+                link.textContent = `Download ${template.name} texture`;
+                link.style.display = 'block';
+                link.style.margin = '10px';
+                document.body.appendChild(link);
+            });
+            
+            // Add preview
+            canvas.style.width = '256px';
+            canvas.style.height = '256px';
+            canvas.style.border = '1px solid #ccc';
+            canvas.style.margin = '10px';
+            document.getElementById('canvases').appendChild(canvas);
+        });
+        
+        console.log('Textures generated! Click links to download.');
+    </script>
+</body>
+</html>

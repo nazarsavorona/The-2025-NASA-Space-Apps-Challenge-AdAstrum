@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# External repositories
+stable-dreamfusion/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.venv/
+.venv_*/
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment variables
+.env
+.env.local
+api.env
+
+# Model files (large)
+*.ckpt
+*.safetensors
+*.bin
+*.pth
+pretrained/
+models/
+
+# Data files (large)
+*.csv
+data/*/
+
+# Temporary files
+*.tmp
+*.temp
