@@ -1,8 +1,10 @@
+from typing import Dict, Any
+
 import numpy as np
 import pandas
 import json
 
-async def call_model(data_format: str, df: pandas.DataFrame):
+async def call_model(data_format: str, df: pandas.DataFrame, hyperparams: Dict[str: Any]):
     predicted_confidence = np.random.rand(len(df))
     predicted_class = [
         0 if c < 0.2 else (1 if c < 0.8 else 2)
