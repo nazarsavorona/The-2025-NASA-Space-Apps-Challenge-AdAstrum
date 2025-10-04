@@ -58,7 +58,7 @@ async def upload(file: UploadFile | None):
             ) from exc
 
 @app.post("/predict/")
-async def get_result_for_file(hyperparams: Dict[str: Any] | None=None):
+async def get_result_for_file(hyperparams: str | None=None):
     try:
         df = pd.read_csv(USER_FILE)
         data_format = get_dataframe_format(df)
@@ -70,7 +70,7 @@ async def get_result_for_file(hyperparams: Dict[str: Any] | None=None):
     return call_model(data_format, df, hyperparams)
 
 @app.post("/run-for-csv/")
-async def get_result_for_file(file: UploadFile | None, hyperparams: Dict[str: Any] | None=None):
+async def get_result_for_file(file: UploadFile | None, hyperparams: str | None=None):
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
     try:
