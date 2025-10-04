@@ -35,7 +35,7 @@ async def add_session_id(request: Request, call_next):
     session_id = request.cookies.get("session_id")
     print(session_id)
     if not session_id:
-        session_id = "single-user" #str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
 
     request.state.session_id = session_id
 
@@ -45,8 +45,7 @@ async def add_session_id(request: Request, call_next):
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=False,
-        samesite="none"
+        secure=True
     )
     return response
 origins = [
