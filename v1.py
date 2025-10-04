@@ -8,13 +8,7 @@ import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score, average_precision_score, brier_score_loss, roc_auc_score
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.utils import shuffle
-
-try:
-    import xgboost as xgb
-except ImportError:  # pragma: no cover - optional dependency
-    xgb = None
 
 try:
     import lightgbm as lgb
@@ -24,7 +18,10 @@ except ImportError:  # pragma: no cover - optional dependency
 RANDOM_SEED = 42
 np.random.seed(RANDOM_SEED)
 
-ENABLE_TORCH = os.environ.get("ENABLE_TORCH", "0") == "1"
+import warnings
+warnings.filterwarnings("ignore")
+
+from joblib import dump
 
 
 @dataclass
@@ -40,69 +37,99 @@ class MissionSpec:
 
 
 FEATURE_COLUMNS = [
-    "period",
+    "orbital_period",
+    "transit_duration",
+    "transit_depth",
+    "impact_parameter",
+    "eccentricity",
+    "inclination",
     "planet_radius",
-    "stellar_teff",
-    "stellar_radius",
+    "planet_equilibrium_temp",
+    "insolation_flux",
+    "stellar_temp",
     "stellar_logg",
-    "insolation",
-    "equilibrium_temp",
+    "stellar_radius",
+    "stellar_mass",
+    "stellar_metallicity",
 ]
 
 MISSION_SPECS = [
     MissionSpec(
         name="kepler",
-        path="data/cumulative_2025.10.03_23.45.06.csv",
+        path="data/kepler.csv",
         label_field="koi_disposition",
         positive_labels=("CONFIRMED",),
         negative_labels=("FALSE POSITIVE",),
         candidate_labels=("CANDIDATE",),
         feature_map={
-            "period": "koi_period",
+            "orbital_period": "koi_period",
+            "transit_duration": "koi_duration",
+            "transit_depth": "koi_depth",
+            "impact_parameter": "koi_impact",
+            "eccentricity": "koi_eccen",
+            "inclination": "koi_incl",
             "planet_radius": "koi_prad",
-            "stellar_teff": "koi_steff",
-            "stellar_radius": "koi_srad",
+            "planet_equilibrium_temp": "koi_teq",
+            "insolation_flux": "koi_insol",
+            "stellar_temp": "koi_steff",
             "stellar_logg": "koi_slogg",
-            "insolation": "koi_insol",
-            "equilibrium_temp": "koi_teq",
+            "stellar_radius": "koi_srad",
+            "stellar_mass": "koi_smass",
+            "stellar_metallicity": "koi_smet",
         },
     ),
     MissionSpec(
         name="k2",
-        path="data/k2pandc_2025.10.03_23.45.12.csv",
+        path="data/k2.csv",
         label_field="disposition",
         positive_labels=("CONFIRMED",),
         negative_labels=("FALSE POSITIVE", "REFUTED"),
         candidate_labels=("CANDIDATE",),
         feature_map={
-            "period": "pl_orbper",
+            "orbital_period": "pl_orbper",
+            "transit_duration": "pl_trandur",
+            "transit_depth": "pl_trandep",
+            "impact_parameter": "pl_imppar",
+            "eccentricity": "pl_orbeccen",
+            "inclination": "pl_orbincl",
             "planet_radius": "pl_rade",
-            "stellar_teff": "st_teff",
-            "stellar_radius": "st_rad",
+            "planet_equilibrium_temp": "pl_eqt",
+            "insolation_flux": "pl_insol",
+            "stellar_temp": "st_teff",
             "stellar_logg": "st_logg",
-            "insolation": "pl_insol",
-            "equilibrium_temp": "pl_eqt",
+            "stellar_radius": "st_rad",
+            "stellar_mass": "st_mass",
+            "stellar_metallicity": "st_met",
         },
         requires_default_flag=True,
     ),
     MissionSpec(
-        name="tess",
-        path="data/TOI_2025.10.03_23.44.18.csv",
+        name="toi",
+        path="data/tess.csv",
         label_field="tfopwg_disp",
         positive_labels=("CP", "KP"),
         negative_labels=("FP", "FA"),
         candidate_labels=("PC", "APC"),
         feature_map={
-            "period": "pl_orbper",
+            "orbital_period": "pl_orbper",
+            "transit_duration": "pl_trandur",
+            "transit_depth": "pl_trandep",
+            "impact_parameter": "pl_imppar",
+            "eccentricity": "pl_orbeccen",
+            "inclination": "pl_orbincl",
             "planet_radius": "pl_rade",
-            "stellar_teff": "st_teff",
-            "stellar_radius": "st_rad",
+            "planet_equilibrium_temp": "pl_eqt",
+            "insolation_flux": "pl_insol",
+            "stellar_temp": "st_teff",
             "stellar_logg": "st_logg",
-            "insolation": "pl_insol",
-            "equilibrium_temp": "pl_eqt",
+            "stellar_radius": "st_rad",
+            "stellar_mass": "st_mass",
+            "stellar_metallicity": "st_met",
         },
     ),
 ]
+
+MODEL_DIR = "models"
 
 
 def iter_csv_records(path: str) -> Iterable[Dict[str, str]]:
@@ -191,20 +218,28 @@ def apply_candidate_weight(
 def gather_datasets(
     include_candidates: bool = True,
     candidate_weight: float = 0.35,
-) -> Dict[str, pd.DataFrame]:
+) -> Tuple[Dict[str, pd.DataFrame], SimpleImputer]:
     mission_frames = load_all_missions()
+    combined_features = pd.concat(
+        [frame[FEATURE_COLUMNS] for frame in mission_frames.values()],
+        ignore_index=True,
+    )
+    shared_imputer = SimpleImputer(strategy="median")
+    shared_imputer.fit(combined_features)
+
     datasets: Dict[str, pd.DataFrame] = {}
     for name, frame in mission_frames.items():
         datasets[name] = apply_candidate_weight(frame, include_candidates, candidate_weight)
     combined_raw = pd.concat(mission_frames.values(), ignore_index=True)
     datasets["combined"] = apply_candidate_weight(combined_raw, include_candidates, candidate_weight)
-    return datasets
+    return datasets, shared_imputer
 
 
 def prepare_splits(
     data: pd.DataFrame,
     include_candidates: bool = True,
     test_size: float = 0.2,
+    imputer: Optional[SimpleImputer] = None,
 ) -> Dict[str, Optional[np.ndarray]]:
     certain = data[~data["is_candidate"]].copy()
     candidate = data[data["is_candidate"]].copy() if include_candidates else data.iloc[0:0]
@@ -216,11 +251,14 @@ def prepare_splits(
         random_state=RANDOM_SEED,
     )
 
-    imputer = SimpleImputer(strategy="median")
-    imputer.fit(train_df[FEATURE_COLUMNS])
+    if imputer is None:
+        fitted_imputer = SimpleImputer(strategy="median")
+        fitted_imputer.fit(train_df[FEATURE_COLUMNS])
+    else:
+        fitted_imputer = imputer
 
-    X_train_certain = imputer.transform(train_df[FEATURE_COLUMNS])
-    X_test = imputer.transform(test_df[FEATURE_COLUMNS])
+    X_train_certain = fitted_imputer.transform(train_df[FEATURE_COLUMNS])
+    X_test = fitted_imputer.transform(test_df[FEATURE_COLUMNS])
     y_train = train_df["label"].to_numpy(dtype=np.int64)
     y_test = test_df["label"].to_numpy(dtype=np.int64)
     w_train = np.ones_like(y_train, dtype=np.float32)
@@ -230,7 +268,7 @@ def prepare_splits(
     w_candidate = None
 
     if include_candidates and not candidate.empty:
-        X_candidate_tmp = imputer.transform(candidate[FEATURE_COLUMNS])
+        X_candidate_tmp = fitted_imputer.transform(candidate[FEATURE_COLUMNS])
         y_candidate_tmp = candidate["label"].to_numpy(dtype=np.int64)
         w_candidate_tmp = candidate["sample_weight"].to_numpy(dtype=np.float32)
         if np.any(w_candidate_tmp > 0):
@@ -247,13 +285,6 @@ def prepare_splits(
 
     X_train, y_train, w_train = shuffle(X_train, y_train, w_train, random_state=RANDOM_SEED)
 
-    scaler = StandardScaler()
-    scaler.fit(X_train)
-
-    X_train_scaled = scaler.transform(X_train).astype(np.float32)
-    X_test_scaled = scaler.transform(X_test).astype(np.float32)
-    X_candidate_scaled = scaler.transform(X_candidate).astype(np.float32) if X_candidate is not None else None
-
     result: Dict[str, Optional[np.ndarray]] = {
         "train_df": train_df.reset_index(drop=True),
         "test_df": test_df.reset_index(drop=True),
@@ -266,11 +297,7 @@ def prepare_splits(
         "X_candidate": None if X_candidate is None else X_candidate.astype(np.float32),
         "y_candidate": y_candidate,
         "w_candidate": None if w_candidate is None else w_candidate.astype(np.float32),
-        "X_train_scaled": X_train_scaled,
-        "X_test_scaled": X_test_scaled,
-        "X_candidate_scaled": X_candidate_scaled,
-        "imputer": imputer,
-        "scaler": scaler,
+        "imputer": fitted_imputer,
     }
     return result
 
@@ -293,169 +320,46 @@ def print_metrics(model_name: str, metrics: Dict[str, float]) -> None:
     )
 
 
-def show_candidate_scores(
-    model_name: str,
-    probabilities: Optional[np.ndarray],
-    candidate_df: pd.DataFrame,
-    top_k: int = 5,
-) -> None:
-    if probabilities is None or candidate_df.empty:
-        return
-    order = np.argsort(probabilities)[::-1][:top_k]
-    print(f"Top {len(order)} candidate scores from {model_name}:")
-    for idx in order:
-        row = candidate_df.iloc[idx]
-        period = row["period"]
-        prad = row["planet_radius"]
-        mission = row["mission"]
-        disp = row["disposition"]
-        period_txt = f"{period:.3f}" if pd.notna(period) else "nan"
-        prad_txt = f"{prad:.3f}" if pd.notna(prad) else "nan"
-        print(
-            f"  {mission:>6} {disp:<4} prob={probabilities[idx]:.3f} "
-            f"period(days)={period_txt} radius(Rearth)={prad_txt}"
-        )
-
-
-def print_sample_predictions(
-    model_name: str,
-    probabilities: np.ndarray,
-    test_df: pd.DataFrame,
-    count: int = 5,
-) -> None:
-    print(f"Sample {count} predictions from {model_name}:")
-    limit = min(count, len(test_df))
-    for i in range(limit):
-        row = test_df.iloc[i]
-        print(
-            f"  true={row['label']} prob={probabilities[i]:.3f} "
-            f"mission={row['mission']} disposition={row['disposition']}"
-        )
-
-
-def train_xgboost(X_train: np.ndarray, y_train: np.ndarray, w_train: np.ndarray):
-    if xgb is None:
-        print("XGBoost is not installed; skipping.")
-        return None
-    model = xgb.XGBClassifier(
-        n_estimators=400,
-        learning_rate=0.03,
-        max_depth=5,
-        subsample=0.85,
-        colsample_bytree=0.85,
-        objective="binary:logistic",
-        eval_metric="logloss",
-        random_state=RANDOM_SEED,
-        tree_method="hist",
-    )
-    model.fit(X_train, y_train, sample_weight=w_train)
-    return model
-
-
-def train_lightgbm(X_train: np.ndarray, y_train: np.ndarray, w_train: np.ndarray):
+def train_lightgbm(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    w_train: np.ndarray,
+):
     if lgb is None:
         print("LightGBM is not installed; skipping.")
         return None
+
+    # Fixed hyperparameters chosen from prior grid search on the combined dataset.
     model = lgb.LGBMClassifier(
-        n_estimators=600,
+        n_estimators=400,
         learning_rate=0.03,
         num_leaves=48,
+        min_child_samples=40,
         subsample=0.8,
         colsample_bytree=0.8,
         reg_alpha=0.0,
         reg_lambda=1.0,
         random_state=RANDOM_SEED,
+        verbosity=-1,
+        n_jobs=-1,
     )
     model.fit(X_train, y_train, sample_weight=w_train)
     return model
 
 
-def run_pytorch_pipeline(
-    train_data: Tuple[np.ndarray, np.ndarray, np.ndarray],
-    test_data: Tuple[np.ndarray, np.ndarray],
-    candidate_scaled: Optional[np.ndarray],
-    candidate_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-    dataset_name: str,
-) -> Optional[Dict[str, float]]:
-    if not ENABLE_TORCH:
-        print(
-            f"PyTorch disabled for '{dataset_name}' (set ENABLE_TORCH=1 to enable in supported environments)."
-        )
-        return None
-    try:
-        import torch
-        import torch.nn as nn
-        from torch.utils.data import DataLoader, Dataset
-    except Exception as exc:  # pragma: no cover - optional path
-        print(f"PyTorch unavailable for '{dataset_name}' ({exc}); skipping neural network.")
-        return None
+def save_model_artifacts(dataset_name: str, model) -> None:
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    model_path = os.path.join(MODEL_DIR, f"{dataset_name}_model.joblib")
+    dump(model, model_path)
+    print(f"Saved LightGBM model to '{model_path}'.")
 
-    torch.manual_seed(RANDOM_SEED)
-    torch.set_num_threads(1)
 
-    class WeightedTensorDataset(Dataset):
-        def __init__(self, features: np.ndarray, labels: np.ndarray, weights: np.ndarray) -> None:
-            self.features = torch.from_numpy(features.astype(np.float32))
-            self.labels = torch.from_numpy(labels.astype(np.float32)).unsqueeze(1)
-            self.weights = torch.from_numpy(weights.astype(np.float32)).unsqueeze(1)
-
-        def __len__(self) -> int:
-            return self.features.shape[0]
-
-        def __getitem__(self, index: int):
-            return self.features[index], self.labels[index], self.weights[index]
-
-    class ExoplanetNet(nn.Module):
-        def __init__(self, input_dim: int) -> None:
-            super().__init__()
-            self.layers = nn.Sequential(
-                nn.Linear(input_dim, 64),
-                nn.ReLU(),
-                nn.Dropout(0.2),
-                nn.Linear(64, 32),
-                nn.ReLU(),
-                nn.Linear(32, 1),
-            )
-
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return self.layers(x)
-
-    X_train_scaled, y_train, w_train = train_data
-    X_test_scaled, y_test = test_data
-
-    dataset = WeightedTensorDataset(X_train_scaled, y_train, w_train)
-    loader = DataLoader(dataset, batch_size=64, shuffle=True, drop_last=False)
-    model = ExoplanetNet(X_train_scaled.shape[1])
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-2)
-    criterion = nn.BCEWithLogitsLoss(reduction="none")
-
-    model.train()
-    for _ in range(80):
-        for features, labels, weights in loader:
-            optimizer.zero_grad()
-            logits = model(features)
-            loss = criterion(logits, labels)
-            loss = (loss * weights).mean()
-            loss.backward()
-            optimizer.step()
-
-    model.eval()
-    with torch.no_grad():
-        test_logits = model(torch.from_numpy(X_test_scaled.astype(np.float32)))
-        test_probs = torch.sigmoid(test_logits).numpy().flatten()
-
-    metrics = compute_metrics(y_test, test_probs)
-    print_metrics("PyTorch NN", metrics)
-    print_sample_predictions("PyTorch NN", test_probs, test_df)
-
-    candidate_probs = None
-    if candidate_scaled is not None and not candidate_df.empty:
-        with torch.no_grad():
-            candidate_logits = model(torch.from_numpy(candidate_scaled.astype(np.float32)))
-            candidate_probs = torch.sigmoid(candidate_logits).numpy().flatten()
-    show_candidate_scores("PyTorch NN", candidate_probs, candidate_df)
-    return metrics
+def save_shared_imputer(imputer: SimpleImputer) -> str:
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    imputer_path = os.path.join(MODEL_DIR, "shared_imputer.joblib")
+    dump(imputer, imputer_path)
+    print(f"Saved shared imputer to '{imputer_path}'.")
+    return imputer_path
 
 
 def print_dataset_overview(dataset_name: str, data: pd.DataFrame) -> None:
@@ -483,67 +387,69 @@ def evaluate_dataset(
     dataset_name: str,
     data: pd.DataFrame,
     include_candidates: bool,
+    imputer: SimpleImputer,
 ) -> Dict[str, Dict[str, float]]:
     print(f"\n=== {dataset_name.upper()} DATASET ===")
     print_dataset_overview(dataset_name, data)
     try:
-        prepared = prepare_splits(data, include_candidates=include_candidates)
+        prepared = prepare_splits(
+            data,
+            include_candidates=include_candidates,
+            imputer=imputer,
+        )
     except ValueError as exc:
         print(f"Skipping {dataset_name}: {exc}")
         return {}
 
     metrics_summary: Dict[str, Dict[str, float]] = {}
 
-    xgb_model = train_xgboost(prepared["X_train"], prepared["y_train"], prepared["w_train"])
-    if xgb_model is not None:
-        xgb_test_probs = xgb_model.predict_proba(prepared["X_test"])[:, 1]
-        metrics = compute_metrics(prepared["y_test"], xgb_test_probs)
-        print_metrics("XGBoost", metrics)
-        print_sample_predictions("XGBoost", xgb_test_probs, prepared["test_df"])
-        candidate_probs = None
-        if prepared["X_candidate"] is not None:
-            candidate_probs = xgb_model.predict_proba(prepared["X_candidate"])[:, 1]
-        show_candidate_scores("XGBoost", candidate_probs, prepared["candidate_df"])
-        metrics_summary["XGBoost"] = metrics
-
-    lgb_model = train_lightgbm(prepared["X_train"], prepared["y_train"], prepared["w_train"])
-    if lgb_model is not None:
-        lgb_test_probs = lgb_model.predict_proba(prepared["X_test"])[:, 1]
-        metrics = compute_metrics(prepared["y_test"], lgb_test_probs)
-        print_metrics("LightGBM", metrics)
-        print_sample_predictions("LightGBM", lgb_test_probs, prepared["test_df"])
-        candidate_probs = None
-        if prepared["X_candidate"] is not None:
-            candidate_probs = lgb_model.predict_proba(prepared["X_candidate"])[:, 1]
-        show_candidate_scores("LightGBM", candidate_probs, prepared["candidate_df"])
-        metrics_summary["LightGBM"] = metrics
-
-    torch_metrics = run_pytorch_pipeline(
-        (
-            prepared["X_train_scaled"],
-            prepared["y_train"].astype(np.float32),
-            prepared["w_train"],
-        ),
-        (prepared["X_test_scaled"], prepared["y_test"]),
-        prepared["X_candidate_scaled"],
-        prepared["candidate_df"],
-        prepared["test_df"],
-        dataset_name,
+    lgb_model = train_lightgbm(
+        prepared["X_train"], prepared["y_train"], prepared["w_train"]
     )
-    if torch_metrics is not None:
-        metrics_summary["PyTorch NN"] = torch_metrics
+    if lgb_model is None:
+        return metrics_summary
+
+    lgb_test_probs = lgb_model.predict_proba(prepared["X_test"])[:, 1]
+    metrics = compute_metrics(prepared["y_test"], lgb_test_probs)
+    print_metrics("LightGBM", metrics)
+    metrics_summary["LightGBM"] = metrics
+
+    save_model_artifacts(dataset_name, lgb_model)
+
+    candidate_df = prepared.get("candidate_df")
+    candidate_features = prepared.get("X_candidate")
+    if (
+        candidate_df is not None
+        and not candidate_df.empty
+        and candidate_features is not None
+    ):
+        candidate_probs = lgb_model.predict_proba(candidate_features)[:, 1]
+        top_indices = np.argsort(candidate_probs)[::-1][:5]
+        print("Top candidate scores from LightGBM:")
+        for idx in top_indices:
+            row = candidate_df.iloc[idx]
+            period = row["orbital_period"]
+            radius = row["planet_radius"]
+            period_txt = f"{period:.3f}" if pd.notna(period) else "nan"
+            radius_txt = f"{radius:.3f}" if pd.notna(radius) else "nan"
+            print(
+                f"  {row['mission']:>6} {row['disposition']:<4} prob={candidate_probs[idx]:.3f} "
+                f"period(days)={period_txt} radius(Rearth)={radius_txt}"
+            )
 
     return metrics_summary
 
 
 def main() -> None:
     include_candidates = True
-    candidate_weight = 0.35
+    candidate_weight = 0.01
 
-    datasets = gather_datasets(
+    datasets, shared_imputer = gather_datasets(
         include_candidates=include_candidates,
         candidate_weight=candidate_weight,
     )
+
+    save_shared_imputer(shared_imputer)
 
     evaluation: Dict[str, Dict[str, float]] = {}
     ordered_names: List[str] = [spec.name for spec in MISSION_SPECS if spec.name in datasets]
@@ -551,16 +457,21 @@ def main() -> None:
         ordered_names.append("combined")
 
     for name in ordered_names:
-        metrics = evaluate_dataset(name, datasets[name], include_candidates=include_candidates)
-        evaluation[name] = metrics
+        result = evaluate_dataset(
+            name,
+            datasets[name],
+            include_candidates=include_candidates,
+            imputer=shared_imputer,
+        )
+        evaluation[name] = result
 
     if evaluation:
         print("\n=== METRIC SUMMARY ===")
-        for dataset_name, models in evaluation.items():
-            if not models:
+        for dataset_name, metrics_block in evaluation.items():
+            if not metrics_block:
                 continue
             print(f"{dataset_name}:")
-            for model_name, metrics in models.items():
+            for model_name, metrics in metrics_block.items():
                 print(
                     f"  {model_name:<12} accuracy={metrics['accuracy']:.3f} "
                     f"roc_auc={metrics['roc_auc']:.3f} avg_precision={metrics['avg_precision']:.3f} "
