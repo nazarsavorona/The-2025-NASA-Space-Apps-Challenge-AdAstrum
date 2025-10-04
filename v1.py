@@ -7,8 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score, average_precision_score, brier_score_loss, roc_auc_score
-from sklearn.model_selection import train_test_split
-from sklearn.utils import shuffle
+from sklearn.model_selection import StratifiedKFold
 
 try:
     import lightgbm as lgb
@@ -201,105 +200,28 @@ def load_all_missions() -> Dict[str, pd.DataFrame]:
     return frames
 
 
-def apply_candidate_weight(
-    frame: pd.DataFrame,
-    include_candidates: bool = True,
-    candidate_weight: float = 0.35,
-) -> pd.DataFrame:
-    result = frame.copy()
-    result["sample_weight"] = 1.0
-    if include_candidates:
-        result.loc[result["is_candidate"], "sample_weight"] = candidate_weight
-    else:
-        result = result[~result["is_candidate"]].copy()
-    return result
-
-
-def gather_datasets(
-    include_candidates: bool = True,
-    candidate_weight: float = 0.35,
-) -> Tuple[Dict[str, pd.DataFrame], SimpleImputer]:
+def gather_datasets(include_candidates: bool = True) -> Tuple[Dict[str, pd.DataFrame], SimpleImputer]:
     mission_frames = load_all_missions()
-    combined_features = pd.concat(
-        [frame[FEATURE_COLUMNS] for frame in mission_frames.values()],
-        ignore_index=True,
-    )
+
+    filtered_frames: Dict[str, pd.DataFrame] = {}
+    for name, frame in mission_frames.items():
+        filtered = frame.copy()
+        if not include_candidates:
+            filtered = filtered[~filtered["is_candidate"]].copy()
+        filtered_frames[name] = filtered
+
+    feature_sources = [frame[FEATURE_COLUMNS] for frame in filtered_frames.values() if not frame.empty]
+    if not feature_sources:
+        raise RuntimeError("No data available to fit imputer; check dataset filtering.")
+
+    combined_features = pd.concat(feature_sources, ignore_index=True)
     shared_imputer = SimpleImputer(strategy="median")
     shared_imputer.fit(combined_features)
 
-    datasets: Dict[str, pd.DataFrame] = {}
-    for name, frame in mission_frames.items():
-        datasets[name] = apply_candidate_weight(frame, include_candidates, candidate_weight)
-    combined_raw = pd.concat(mission_frames.values(), ignore_index=True)
-    datasets["combined"] = apply_candidate_weight(combined_raw, include_candidates, candidate_weight)
+    datasets: Dict[str, pd.DataFrame] = {name: frame for name, frame in filtered_frames.items()}
+    combined_raw = pd.concat(filtered_frames.values(), ignore_index=True)
+    datasets["combined"] = combined_raw
     return datasets, shared_imputer
-
-
-def prepare_splits(
-    data: pd.DataFrame,
-    include_candidates: bool = True,
-    test_size: float = 0.2,
-    imputer: Optional[SimpleImputer] = None,
-) -> Dict[str, Optional[np.ndarray]]:
-    certain = data[~data["is_candidate"]].copy()
-    candidate = data[data["is_candidate"]].copy() if include_candidates else data.iloc[0:0]
-
-    train_df, test_df = train_test_split(
-        certain,
-        test_size=test_size,
-        stratify=certain["label"],
-        random_state=RANDOM_SEED,
-    )
-
-    if imputer is None:
-        fitted_imputer = SimpleImputer(strategy="median")
-        fitted_imputer.fit(train_df[FEATURE_COLUMNS])
-    else:
-        fitted_imputer = imputer
-
-    X_train_certain = fitted_imputer.transform(train_df[FEATURE_COLUMNS])
-    X_test = fitted_imputer.transform(test_df[FEATURE_COLUMNS])
-    y_train = train_df["label"].to_numpy(dtype=np.int64)
-    y_test = test_df["label"].to_numpy(dtype=np.int64)
-    w_train = np.ones_like(y_train, dtype=np.float32)
-
-    X_candidate = None
-    y_candidate = None
-    w_candidate = None
-
-    if include_candidates and not candidate.empty:
-        X_candidate_tmp = fitted_imputer.transform(candidate[FEATURE_COLUMNS])
-        y_candidate_tmp = candidate["label"].to_numpy(dtype=np.int64)
-        w_candidate_tmp = candidate["sample_weight"].to_numpy(dtype=np.float32)
-        if np.any(w_candidate_tmp > 0):
-            X_train = np.vstack([X_train_certain, X_candidate_tmp])
-            y_train = np.concatenate([y_train, y_candidate_tmp])
-            w_train = np.concatenate([w_train, w_candidate_tmp])
-        else:
-            X_train = X_train_certain
-        X_candidate = X_candidate_tmp
-        y_candidate = y_candidate_tmp
-        w_candidate = w_candidate_tmp
-    else:
-        X_train = X_train_certain
-
-    X_train, y_train, w_train = shuffle(X_train, y_train, w_train, random_state=RANDOM_SEED)
-
-    result: Dict[str, Optional[np.ndarray]] = {
-        "train_df": train_df.reset_index(drop=True),
-        "test_df": test_df.reset_index(drop=True),
-        "candidate_df": candidate.reset_index(drop=True),
-        "X_train": X_train.astype(np.float32),
-        "y_train": y_train,
-        "w_train": w_train.astype(np.float32),
-        "X_test": X_test.astype(np.float32),
-        "y_test": y_test,
-        "X_candidate": None if X_candidate is None else X_candidate.astype(np.float32),
-        "y_candidate": y_candidate,
-        "w_candidate": None if w_candidate is None else w_candidate.astype(np.float32),
-        "imputer": fitted_imputer,
-    }
-    return result
 
 
 def compute_metrics(y_true: np.ndarray, probabilities: np.ndarray) -> Dict[str, float]:
@@ -386,96 +308,135 @@ def print_dataset_overview(dataset_name: str, data: pd.DataFrame) -> None:
 def evaluate_dataset(
     dataset_name: str,
     data: pd.DataFrame,
-    include_candidates: bool,
-    imputer: SimpleImputer,
-) -> Dict[str, Dict[str, float]]:
+    shared_imputer: SimpleImputer,
+    n_splits: int = 5,
+) -> Dict[str, Dict[str, Dict[str, float]]]:
     print(f"\n=== {dataset_name.upper()} DATASET ===")
     print_dataset_overview(dataset_name, data)
-    try:
-        prepared = prepare_splits(
-            data,
-            include_candidates=include_candidates,
-            imputer=imputer,
-        )
-    except ValueError as exc:
-        print(f"Skipping {dataset_name}: {exc}")
+
+    if data.empty:
+        print(f"Skipping {dataset_name}: no rows available after filtering.")
         return {}
 
-    metrics_summary: Dict[str, Dict[str, float]] = {}
+    if "is_candidate" in data.columns:
+        certain = data[~data["is_candidate"]].copy()
+    else:
+        certain = data.copy()
+    if certain.empty:
+        print(f"Skipping {dataset_name}: no certain (non-candidate) rows found.")
+        return {}
 
-    lgb_model = train_lightgbm(
-        prepared["X_train"], prepared["y_train"], prepared["w_train"]
-    )
-    if lgb_model is None:
-        return metrics_summary
+    label_counts = certain["label"].value_counts()
+    if (label_counts < n_splits).any():
+        print(
+            f"Skipping {dataset_name}: not enough samples per class for {n_splits}-fold stratified CV."
+        )
+        return {}
 
-    lgb_test_probs = lgb_model.predict_proba(prepared["X_test"])[:, 1]
-    metrics = compute_metrics(prepared["y_test"], lgb_test_probs)
-    print_metrics("LightGBM", metrics)
-    metrics_summary["LightGBM"] = metrics
+    fold_metrics: List[Dict[str, float]] = []
+    splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_SEED)
 
-    save_model_artifacts(dataset_name, lgb_model)
-
-    candidate_df = prepared.get("candidate_df")
-    candidate_features = prepared.get("X_candidate")
-    if (
-        candidate_df is not None
-        and not candidate_df.empty
-        and candidate_features is not None
+    for fold_idx, (train_idx, val_idx) in enumerate(
+        splitter.split(certain[FEATURE_COLUMNS], certain["label"]),
+        start=1,
     ):
-        candidate_probs = lgb_model.predict_proba(candidate_features)[:, 1]
-        top_indices = np.argsort(candidate_probs)[::-1][:5]
-        print("Top candidate scores from LightGBM:")
-        for idx in top_indices:
-            row = candidate_df.iloc[idx]
-            period = row["orbital_period"]
-            radius = row["planet_radius"]
-            period_txt = f"{period:.3f}" if pd.notna(period) else "nan"
-            radius_txt = f"{radius:.3f}" if pd.notna(radius) else "nan"
-            print(
-                f"  {row['mission']:>6} {row['disposition']:<4} prob={candidate_probs[idx]:.3f} "
-                f"period(days)={period_txt} radius(Rearth)={radius_txt}"
-            )
+        train_df = certain.iloc[train_idx].reset_index(drop=True)
+        val_df = certain.iloc[val_idx].reset_index(drop=True)
 
-    return metrics_summary
+        imputer = SimpleImputer(strategy="median")
+        imputer.fit(train_df[FEATURE_COLUMNS])
+
+        X_train = imputer.transform(train_df[FEATURE_COLUMNS])
+        X_val = imputer.transform(val_df[FEATURE_COLUMNS])
+        y_train = train_df["label"].to_numpy(dtype=np.int64)
+        y_val = val_df["label"].to_numpy(dtype=np.int64)
+
+        w_train = np.ones_like(y_train, dtype=np.float32)
+        model = train_lightgbm(X_train, y_train, w_train)
+        if model is None:
+            return {}
+
+        val_prob = model.predict_proba(X_val)[:, 1]
+        metrics = compute_metrics(y_val, val_prob)
+        fold_metrics.append(metrics)
+        print_metrics(f"Fold {fold_idx}", metrics)
+
+    aggregated_mean = {
+        key: float(np.mean([m[key] for m in fold_metrics])) for key in fold_metrics[0]
+    }
+    aggregated_std = {
+        key: float(np.std([m[key] for m in fold_metrics], ddof=0)) for key in fold_metrics[0]
+    }
+
+    print(
+        "Average metrics over "
+        f"{n_splits} folds: "
+        f"accuracy={aggregated_mean['accuracy']:.3f}+/-{aggregated_std['accuracy']:.3f} "
+        f"roc_auc={aggregated_mean['roc_auc']:.3f}+/-{aggregated_std['roc_auc']:.3f} "
+        f"avg_precision={aggregated_mean['avg_precision']:.3f}+/-{aggregated_std['avg_precision']:.3f} "
+        f"brier={aggregated_mean['brier']:.3f}+/-{aggregated_std['brier']:.3f}"
+    )
+
+    # Train final model on all certain rows using the shared imputer for inference.
+    X_full = shared_imputer.transform(certain[FEATURE_COLUMNS])
+    y_full = certain["label"].to_numpy(dtype=np.int64)
+    w_full = np.ones_like(y_full, dtype=np.float32)
+    final_model = train_lightgbm(X_full, y_full, w_full)
+    if final_model is not None:
+        save_model_artifacts(dataset_name, final_model)
+
+    return {
+        "LightGBM": {
+            "mean": aggregated_mean,
+            "std": aggregated_std,
+        }
+    }
 
 
 def main() -> None:
-    include_candidates = True
-    candidate_weight = 0.01
+    include_candidates = False
 
     datasets, shared_imputer = gather_datasets(
         include_candidates=include_candidates,
-        candidate_weight=candidate_weight,
     )
 
     save_shared_imputer(shared_imputer)
 
-    evaluation: Dict[str, Dict[str, float]] = {}
+    evaluation: Dict[str, Dict[str, Dict[str, Dict[str, float]]]] = {}
     ordered_names: List[str] = [spec.name for spec in MISSION_SPECS if spec.name in datasets]
     if "combined" in datasets:
         ordered_names.append("combined")
 
     for name in ordered_names:
+        if datasets[name].empty:
+            print(f"\n=== {name.upper()} DATASET ===")
+            print(f"Skipping {name}: dataset is empty after filtering.")
+            evaluation[name] = {}
+            continue
         result = evaluate_dataset(
             name,
             datasets[name],
-            include_candidates=include_candidates,
-            imputer=shared_imputer,
+            shared_imputer=shared_imputer,
+            n_splits=5,
         )
         evaluation[name] = result
 
     if evaluation:
         print("\n=== METRIC SUMMARY ===")
-        for dataset_name, metrics_block in evaluation.items():
-            if not metrics_block:
+        for dataset_name, models in evaluation.items():
+            if not models:
                 continue
             print(f"{dataset_name}:")
-            for model_name, metrics in metrics_block.items():
+            for model_name, stats in models.items():
+                mean_metrics = stats.get("mean", {})
+                std_metrics = stats.get("std", {})
+                if not mean_metrics:
+                    continue
                 print(
-                    f"  {model_name:<12} accuracy={metrics['accuracy']:.3f} "
-                    f"roc_auc={metrics['roc_auc']:.3f} avg_precision={metrics['avg_precision']:.3f} "
-                    f"brier={metrics['brier']:.3f}"
+                    f"  {model_name:<12} accuracy={mean_metrics['accuracy']:.3f}+/-{std_metrics.get('accuracy', 0.0):.3f} "
+                    f"roc_auc={mean_metrics['roc_auc']:.3f}+/-{std_metrics.get('roc_auc', 0.0):.3f} "
+                    f"avg_precision={mean_metrics['avg_precision']:.3f}+/-{std_metrics.get('avg_precision', 0.0):.3f} "
+                    f"brier={mean_metrics['brier']:.3f}+/-{std_metrics.get('brier', 0.0):.3f}"
                 )
 
 
