@@ -3,7 +3,7 @@ from __future__ import annotations
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,13 +11,23 @@ from joblib import dump
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score, average_precision_score, brier_score_loss, roc_auc_score
 from sklearn.model_selection import StratifiedKFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import RobustScaler, StandardScaler
 
 try:  # pragma: no cover - optional dependency
     import lightgbm as lgb
 except ImportError:  # pragma: no cover - optional dependency
     lgb = None
 
-from .common import FEATURE_COLUMNS, MISSION_SPECS, MissionSpec, iter_csv_records, safe_float
+from .common import (
+    FEATURE_COLUMNS,
+    MODEL_FILENAME,
+    MISSION_SPECS,
+    PREPROCESSOR_FILENAME,
+    MissionSpec,
+    iter_csv_records,
+    safe_float,
+)
 
 RANDOM_SEED = 42
 np.random.seed(RANDOM_SEED)
@@ -71,10 +81,14 @@ def load_mission(spec: MissionSpec, datasets_dir: Path) -> pd.DataFrame:
         record["label"] = label
         record["is_candidate"] = is_candidate
         record["mission"] = spec.name
+        record["dataset_type"] = spec.dataset_type
         record["disposition"] = label_value
         rows.append(record)
 
-    columns = list(spec.feature_map.keys()) + ["label", "is_candidate", "mission", "disposition"]
+    columns = (
+        list(spec.feature_map.keys())
+        + ["label", "is_candidate", "mission", "dataset_type", "disposition"]
+    )
     if not rows:
         return pd.DataFrame(columns=columns)
     return pd.DataFrame(rows, columns=columns)
@@ -91,31 +105,29 @@ def load_all_missions(datasets_dir: Path) -> Dict[str, pd.DataFrame]:
     return frames
 
 
-def gather_datasets(
-    datasets_dir: Path,
-    include_candidates: bool = True,
-) -> Tuple[Dict[str, pd.DataFrame], SimpleImputer]:
+def load_training_frame(datasets_dir: Path, include_candidates: bool) -> pd.DataFrame:
     mission_frames = load_all_missions(datasets_dir)
+    processed = []
+    for frame in mission_frames.values():
+        if frame.empty:
+            continue
+        filtered = frame if include_candidates else frame[~frame["is_candidate"]].copy()
+        if filtered.empty:
+            continue
+        processed.append(filtered)
 
-    filtered_frames: Dict[str, pd.DataFrame] = {}
-    for name, frame in mission_frames.items():
-        filtered = frame.copy()
-        if not include_candidates:
-            filtered = filtered[~filtered["is_candidate"]].copy()
-        filtered_frames[name] = filtered
+    if not processed:
+        raise RuntimeError("No data available after filtering. Check dataset availability and filters.")
 
-    feature_sources = [frame[FEATURE_COLUMNS] for frame in filtered_frames.values() if not frame.empty]
-    if not feature_sources:
-        raise RuntimeError("No data available to fit imputer; check dataset filtering.")
-
-    combined_features = pd.concat(feature_sources, ignore_index=True)
-    shared_imputer = SimpleImputer(strategy="median")
-    shared_imputer.fit(combined_features)
-
-    datasets: Dict[str, pd.DataFrame] = {name: frame for name, frame in filtered_frames.items()}
-    combined_raw = pd.concat(filtered_frames.values(), ignore_index=True)
-    datasets["combined"] = combined_raw
-    return datasets, shared_imputer
+    combined = pd.concat(processed, ignore_index=True)
+    feature_cols = FEATURE_COLUMNS + [
+        "label",
+        "is_candidate",
+        "mission",
+        "dataset_type",
+        "disposition",
+    ]
+    return combined[feature_cols]
 
 
 def compute_metrics(y_true: np.ndarray, probabilities: np.ndarray) -> Dict[str, float]:
@@ -162,175 +174,230 @@ def train_lightgbm(
     return model
 
 
-def save_model_artifacts(model_dir: Path, dataset_name: str, model) -> None:
-    model_dir.mkdir(parents=True, exist_ok=True)
-    model_path = model_dir / f"{dataset_name}_model.joblib"
-    dump(model, model_path)
-    print(f"Saved LightGBM model to '{model_path}'.")
-
-
-def save_shared_imputer(model_dir: Path, imputer: SimpleImputer) -> Path:
-    model_dir.mkdir(parents=True, exist_ok=True)
-    imputer_path = model_dir / "shared_imputer.joblib"
-    dump(imputer, imputer_path)
-    print(f"Saved shared imputer to '{imputer_path}'.")
-    return imputer_path
-
-
-def print_dataset_overview(dataset_name: str, data: pd.DataFrame) -> None:
-    total_rows = len(data)
-    positives = int((data["label"] == 1).sum())
-    negatives = int((data["label"] == 0).sum())
-    candidates = int(data["is_candidate"].sum())
-    print(
-        f"Dataset '{dataset_name}': total={total_rows} positives={positives} "
-        f"negatives={negatives} candidates={candidates}"
-    )
-    mission_stats = (
-        data.groupby("mission")["is_candidate"].agg(["count", "sum"]).reset_index()
-        if "mission" in data.columns
-        else pd.DataFrame()
-    )
-    for _, row in mission_stats.iterrows():
-        print(
-            f"  {row['mission']:<6} total={int(row['count']):4d} "
-            f"candidates={int(row['sum']):4d}"
-        )
-
-
-def evaluate_dataset(
-    dataset_name: str,
-    data: pd.DataFrame,
-    model_dir: Path,
-    shared_imputer: SimpleImputer,
-    n_splits: int = 5,
-) -> Dict[str, Dict[str, Dict[str, float]]]:
-    print(f"\n=== {dataset_name.upper()} DATASET ===")
-    print_dataset_overview(dataset_name, data)
-
-    if data.empty:
-        print(f"Skipping {dataset_name}: no rows available after filtering.")
-        return {}
-
-    if "is_candidate" in data.columns:
-        certain = data[~data["is_candidate"]].copy()
+def build_preprocessor(dataset_type: str) -> Pipeline:
+    if dataset_type == "kepler":
+        steps = [
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
     else:
-        certain = data.copy()
-    if certain.empty:
-        print(f"Skipping {dataset_name}: no certain (non-candidate) rows found.")
-        return {}
+        steps = [
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", RobustScaler(quantile_range=(10.0, 90.0))),
+        ]
+    return Pipeline(steps)
 
-    label_counts = certain["label"].value_counts()
-    if (label_counts < n_splits).any():
-        print(
-            f"Skipping {dataset_name}: not enough samples per class for {n_splits}-fold stratified CV."
-        )
-        return {}
 
-    fold_metrics: List[Dict[str, float]] = []
+def fit_group_pipelines(features: pd.DataFrame, dataset_types: np.ndarray) -> Dict[str, Pipeline]:
+    pipelines: Dict[str, Pipeline] = {}
+    if len(features) != len(dataset_types):
+        raise ValueError("features and dataset_types must align in length.")
+
+    features = features.reset_index(drop=True)
+    dataset_types = np.asarray(dataset_types)
+
+    unique_types = sorted({dtype for dtype in dataset_types})
+    for dtype in unique_types:
+        mask = dataset_types == dtype
+        if not np.any(mask):
+            continue
+        pipeline = build_preprocessor(dtype)
+        pipeline.fit(features.loc[mask, FEATURE_COLUMNS])
+        pipelines[dtype] = pipeline
+
+    if not pipelines:
+        raise RuntimeError("Unable to fit preprocessing pipelines; no dataset types produced data.")
+
+    return pipelines
+
+
+def prepare_features(
+    features: pd.DataFrame,
+    dataset_types: np.ndarray,
+    pipelines: Dict[str, Pipeline],
+    type_to_id: Dict[str, int],
+) -> np.ndarray:
+    if len(features) != len(dataset_types):
+        raise ValueError("features and dataset_types must align in length.")
+
+    features = features.reset_index(drop=True)
+    dataset_types = np.asarray(dataset_types)
+
+    base_dim = len(FEATURE_COLUMNS)
+    transformed = np.empty((len(features), base_dim + 1), dtype=np.float32)
+
+    for dtype in np.unique(dataset_types):
+        if dtype not in pipelines:
+            raise KeyError(f"Missing preprocessing pipeline for dataset type '{dtype}'.")
+        mask = dataset_types == dtype
+        subset = features.loc[mask, FEATURE_COLUMNS]
+        processed = pipelines[dtype].transform(subset)
+        indicator = np.full((processed.shape[0], 1), type_to_id[dtype], dtype=np.float32)
+        transformed[mask] = np.hstack([processed.astype(np.float32), indicator])
+
+    return transformed
+
+
+def summarize_folds(fold_metrics: List[Dict[str, float]]) -> Tuple[Dict[str, float], Dict[str, float]]:
+    means = {key: float(np.mean([m[key] for m in fold_metrics])) for key in fold_metrics[0]}
+    stds = {key: float(np.std([m[key] for m in fold_metrics], ddof=0)) for key in fold_metrics[0]}
+    return means, stds
+
+
+def cross_validate_shared_model(
+    features: pd.DataFrame,
+    labels: np.ndarray,
+    dataset_types: np.ndarray,
+    type_to_id: Dict[str, int],
+    n_splits: int,
+) -> Tuple[List[Dict[str, float]], Dict[str, List[Dict[str, float]]]]:
     splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_SEED)
+    fold_metrics: List[Dict[str, float]] = []
+    per_type_metrics: Dict[str, List[Dict[str, float]]] = {dtype: [] for dtype in type_to_id}
 
-    for fold_idx, (train_idx, val_idx) in enumerate(
-        splitter.split(certain[FEATURE_COLUMNS], certain["label"]),
-        start=1,
-    ):
-        train_df = certain.iloc[train_idx].reset_index(drop=True)
-        val_df = certain.iloc[val_idx].reset_index(drop=True)
+    for fold_idx, (train_idx, val_idx) in enumerate(splitter.split(features, labels), start=1):
+        train_features = features.iloc[train_idx].reset_index(drop=True)
+        val_features = features.iloc[val_idx].reset_index(drop=True)
+        y_train = labels[train_idx]
+        y_val = labels[val_idx]
+        train_types = dataset_types[train_idx]
+        val_types = dataset_types[val_idx]
 
-        imputer = SimpleImputer(strategy="median")
-        imputer.fit(train_df[FEATURE_COLUMNS])
-
-        X_train = imputer.transform(train_df[FEATURE_COLUMNS])
-        X_val = imputer.transform(val_df[FEATURE_COLUMNS])
-        y_train = train_df["label"].to_numpy(dtype=np.int64)
-        y_val = val_df["label"].to_numpy(dtype=np.int64)
+        pipelines = fit_group_pipelines(train_features, train_types)
+        X_train = prepare_features(train_features, train_types, pipelines, type_to_id)
+        X_val = prepare_features(val_features, val_types, pipelines, type_to_id)
 
         w_train = np.ones_like(y_train, dtype=np.float32)
         model = train_lightgbm(X_train, y_train, w_train)
         if model is None:
-            return {}
+            return [], {}
 
         val_prob = model.predict_proba(X_val)[:, 1]
         metrics = compute_metrics(y_val, val_prob)
         fold_metrics.append(metrics)
         print_metrics(f"Fold {fold_idx}", metrics)
 
-    aggregated_mean = {
-        key: float(np.mean([m[key] for m in fold_metrics])) for key in fold_metrics[0]
-    }
-    aggregated_std = {
-        key: float(np.std([m[key] for m in fold_metrics], ddof=0)) for key in fold_metrics[0]
-    }
+        for dtype in per_type_metrics:
+            mask = val_types == dtype
+            if not np.any(mask):
+                continue
+            type_metrics = compute_metrics(y_val[mask], val_prob[mask])
+            per_type_metrics[dtype].append(type_metrics)
 
+    return fold_metrics, per_type_metrics
+
+
+def save_preprocessors(
+    model_dir: Path,
+    pipelines: Dict[str, Pipeline],
+    type_to_id: Dict[str, int],
+) -> Path:
+    model_dir.mkdir(parents=True, exist_ok=True)
+    preprocessor_path = model_dir / PREPROCESSOR_FILENAME
+    bundle = {
+        "pipelines": pipelines,
+        "type_to_id": type_to_id,
+        "id_to_type": {idx: dtype for dtype, idx in type_to_id.items()},
+        "feature_columns": FEATURE_COLUMNS,
+    }
+    dump(bundle, preprocessor_path)
+    print(f"Saved preprocessing bundle to '{preprocessor_path}'.")
+    return preprocessor_path
+
+
+def save_shared_model(model_dir: Path, model) -> Path:
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model_path = model_dir / MODEL_FILENAME
+    dump(model, model_path)
+    print(f"Saved shared LightGBM model to '{model_path}'.")
+    return model_path
+
+
+def print_dataset_overview(data: pd.DataFrame) -> None:
+    total_rows = len(data)
+    positives = int((data["label"] == 1).sum())
+    negatives = int((data["label"] == 0).sum())
+    candidates = int(data["is_candidate"].sum())
     print(
-        "Average metrics over "
-        f"{n_splits} folds: "
-        f"accuracy={aggregated_mean['accuracy']:.3f}+/-{aggregated_std['accuracy']:.3f} "
-        f"roc_auc={aggregated_mean['roc_auc']:.3f}+/-{aggregated_std['roc_auc']:.3f} "
-        f"avg_precision={aggregated_mean['avg_precision']:.3f}+/-{aggregated_std['avg_precision']:.3f} "
-        f"brier={aggregated_mean['brier']:.3f}+/-{aggregated_std['brier']:.3f}"
+        "Dataset summary: "
+        f"total={total_rows} positives={positives} negatives={negatives} candidates={candidates}"
     )
-
-    X_full = shared_imputer.transform(certain[FEATURE_COLUMNS])
-    y_full = certain["label"].to_numpy(dtype=np.int64)
-    w_full = np.ones_like(y_full, dtype=np.float32)
-    final_model = train_lightgbm(X_full, y_full, w_full)
-    if final_model is not None:
-        save_model_artifacts(model_dir, dataset_name, final_model)
-
-    return {
-        "LightGBM": {
-            "mean": aggregated_mean,
-            "std": aggregated_std,
-        }
-    }
+    by_type = (
+        data.groupby("dataset_type")["label"].agg(["count", "sum"]).rename(columns={"sum": "positives"})
+    )
+    for dtype, row in by_type.iterrows():
+        print(
+            f"  {dtype:<7} total={int(row['count']):4d} positives={int(row['positives']):4d}"
+        )
 
 
 def train_models(config: TrainConfig) -> Dict[str, Dict[str, Dict[str, Dict[str, float]]]]:
-    datasets, shared_imputer = gather_datasets(
-        config.datasets_dir,
-        include_candidates=config.include_candidates,
+    data = load_training_frame(config.datasets_dir, config.include_candidates)
+    print_dataset_overview(data)
+
+    features = data[FEATURE_COLUMNS].copy()
+    labels = data["label"].to_numpy(dtype=np.int64)
+    dataset_types = data["dataset_type"].to_numpy(dtype=object)
+
+    unique_types = sorted(set(dataset_types))
+    type_to_id = {dtype: idx for idx, dtype in enumerate(unique_types)}
+
+    fold_metrics, per_type_metrics = cross_validate_shared_model(
+        features,
+        labels,
+        dataset_types,
+        type_to_id,
+        n_splits=config.n_splits,
     )
 
-    save_shared_imputer(config.model_dir, shared_imputer)
+    if not fold_metrics:
+        raise RuntimeError("Cross-validation aborted; LightGBM may be unavailable.")
 
-    evaluation: Dict[str, Dict[str, Dict[str, Dict[str, float]]]] = {}
-    ordered_names: List[str] = [spec.name for spec in MISSION_SPECS if spec.name in datasets]
-    if "combined" in datasets:
-        ordered_names.append("combined")
-
-    for name in ordered_names:
-        if datasets[name].empty:
-            print(f"\n=== {name.upper()} DATASET ===")
-            print(f"Skipping {name}: dataset is empty after filtering.")
-            evaluation[name] = {}
+    overall_mean, overall_std = summarize_folds(fold_metrics)
+    per_type_summary: Dict[str, Dict[str, Dict[str, float]]] = {}
+    for dtype, metrics_list in per_type_metrics.items():
+        if not metrics_list:
             continue
-        result = evaluate_dataset(
-            name,
-            datasets[name],
-            model_dir=config.model_dir,
-            shared_imputer=shared_imputer,
-            n_splits=config.n_splits,
-        )
-        evaluation[name] = result
+        mean_vals, std_vals = summarize_folds(metrics_list)
+        per_type_summary[dtype] = {"mean": mean_vals, "std": std_vals}
 
-    if evaluation:
-        print("\n=== METRIC SUMMARY ===")
-        for dataset_name, models in evaluation.items():
-            if not models:
-                continue
-            print(f"{dataset_name}:")
-            for model_name, stats in models.items():
-                mean_metrics = stats.get("mean", {})
-                std_metrics = stats.get("std", {})
-                if not mean_metrics:
-                    continue
-                print(
-                    f"  {model_name:<12} accuracy={mean_metrics['accuracy']:.3f}+/-{std_metrics.get('accuracy', 0.0):.3f} "
-                    f"roc_auc={mean_metrics['roc_auc']:.3f}+/-{std_metrics.get('roc_auc', 0.0):.3f} "
-                    f"avg_precision={mean_metrics['avg_precision']:.3f}+/-{std_metrics.get('avg_precision', 0.0):.3f} "
-                    f"brier={mean_metrics['brier']:.3f}+/-{std_metrics.get('brier', 0.0):.3f}"
-                )
+    print(
+        "Average metrics over "
+        f"{config.n_splits} folds: "
+        f"accuracy={overall_mean['accuracy']:.3f}+/-{overall_std['accuracy']:.3f} "
+        f"roc_auc={overall_mean['roc_auc']:.3f}+/-{overall_std['roc_auc']:.3f} "
+        f"avg_precision={overall_mean['avg_precision']:.3f}+/-{overall_std['avg_precision']:.3f} "
+        f"brier={overall_mean['brier']:.3f}+/-{overall_std['brier']:.3f}"
+    )
+
+    if per_type_summary:
+        print("Per dataset-type metrics:")
+        for dtype, stats in per_type_summary.items():
+            mean_vals = stats["mean"]
+            std_vals = stats["std"]
+            print(
+                f"  {dtype:<7} accuracy={mean_vals['accuracy']:.3f}+/-{std_vals['accuracy']:.3f} "
+                f"roc_auc={mean_vals['roc_auc']:.3f}+/-{std_vals['roc_auc']:.3f} "
+                f"avg_precision={mean_vals['avg_precision']:.3f}+/-{std_vals['avg_precision']:.3f} "
+                f"brier={mean_vals['brier']:.3f}+/-{std_vals['brier']:.3f}"
+            )
+
+    pipelines = fit_group_pipelines(features, dataset_types)
+    X_all = prepare_features(features, dataset_types, pipelines, type_to_id)
+    weights = np.ones_like(labels, dtype=np.float32)
+    final_model = train_lightgbm(X_all, labels, weights)
+    if final_model is None:
+        raise RuntimeError("LightGBM is required to train the shared model but is not installed.")
+
+    save_shared_model(config.model_dir, final_model)
+    save_preprocessors(config.model_dir, pipelines, type_to_id)
+
+    evaluation = {
+        "shared_model": {
+            "LightGBM": {"mean": overall_mean, "std": overall_std},
+            "by_dataset_type": per_type_summary,
+        }
+    }
 
     return evaluation
 

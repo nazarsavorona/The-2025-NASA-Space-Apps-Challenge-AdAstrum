@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from model_service import get_model_service
 
 
-async def call_model(data_format: str, df: pd.DataFrame, hyperparams: dict) -> dict:
+async def call_model(data_format: str, df: pd.DataFrame, hyperparams: dict) -> pd.DataFrame:
     """
     Call the model service to make predictions.
     
@@ -33,19 +33,7 @@ async def call_model(data_format: str, df: pd.DataFrame, hyperparams: dict) -> d
             format_name = "k2"
         
         # Make predictions
-        result_df = model_service.predict(df, format_name, hyperparams)
-        
-        # Convert result to JSON-serializable format
-        return {
-            "status": "success",
-            "predictions": result_df.to_dict(orient="records"),
-            "summary": {
-                "total": len(result_df),
-                "confirmed": int((result_df["predicted_class"] == 2).sum()),
-                "candidate": int((result_df["predicted_class"] == 1).sum()),
-                "false_positive": int((result_df["predicted_class"] == 0).sum()),
-            }
-        }
+        return model_service.predict(df, format_name, hyperparams)
         
     except FileNotFoundError as e:
         raise HTTPException(
