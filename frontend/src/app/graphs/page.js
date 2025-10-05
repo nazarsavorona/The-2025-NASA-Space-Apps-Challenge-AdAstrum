@@ -1,7 +1,7 @@
 'use client';
 
 
-import FeatureImportance from "@/app/graphs/FeatureImportance";
+import FeatureImportance from "./FeatureImportance";
 
 export default function Graphs() {
     return (
