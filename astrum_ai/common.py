@@ -96,7 +96,7 @@ MISSION_SPECS: Sequence[MissionSpec] = [
     ),
     MissionSpec(
         name="toi",
-        filename="tess.csv",
+        filename="toi.csv",
         label_field="tfopwg_disp",
         positive_labels=("CP", "KP"),
         negative_labels=("FP", "FA"),

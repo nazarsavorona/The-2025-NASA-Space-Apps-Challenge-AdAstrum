@@ -60,7 +60,7 @@ FEATURE_MAPS = {
         "stellar_mass": "st_mass",
         "stellar_metallicity": "st_met",
     },
-    "toi": {
+    "tess": {
         "orbital_period": "pl_orbper",
         "transit_duration": "pl_trandur",
         "transit_depth": "pl_trandep",
@@ -129,7 +129,7 @@ class ModelService:
         
         Args:
             df: Raw input dataframe with mission-specific column names
-            format_name: Mission format ("kepler", "k2", or "toi")
+            format_name: Mission format ("kepler", "k2", or "tess")
             
         Returns:
             DataFrame with standardized feature columns
@@ -179,7 +179,7 @@ class ModelService:
         
         Args:
             df: Input dataframe with raw mission data
-            format_name: Mission format ("kepler", "k2", or "toi")
+            format_name: Mission format ("kepler", "k2", or "tess")
             hyperparams: Dictionary with keys:
                 - candidate_threshold: float (threshold for candidate class)
                 - confirmed_threshold: float (threshold for confirmed class)
