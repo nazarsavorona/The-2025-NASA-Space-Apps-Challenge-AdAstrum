@@ -218,7 +218,7 @@ async def test_endpoint(request: Request):
     session_id = request.state.session_id
     return FileResponse(
         path=results_file(session_id),
-        filename="file.csv",
+        filename="result.csv",
         media_type="text/csv"
     )
 
