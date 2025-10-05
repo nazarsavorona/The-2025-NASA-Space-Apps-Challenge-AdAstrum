@@ -8,7 +8,7 @@ import { storage } from '../../../utils/storage';
 
 const planetImage = 'https://images.unsplash.com/photo-1614313913007-2b4ae8ce32ec?w=800';
 
-export default function PlanetDetail({ params }) {
+export default function PlanetDetail() {
     const [planet, setPlanet] = useState(null);
     const [loading, setLoading] = useState(true);
     const [curveConfig, setCurveConfig] = useState({
@@ -22,18 +22,50 @@ export default function PlanetDetail({ params }) {
         slope: 2.2
     });
     const router = useRouter();
+    const chartContainerRef = useRef(null);
+    const [chartWidth, setChartWidth] = useState(680);
+    const [periodHours, setPeriodHours] = useState(undefined);
+    const [usePhase, setUsePhase] = useState(false);
+    const [snr, setSnr] = useState(0);
+
+    const routeParams = useParams();
+    const routeIdStr = routeParams?.id;
+    const routeId = Number.parseInt(Array.isArray(routeIdStr) ? routeIdStr[0] : routeIdStr, 10);
 
     useEffect(() => {
         const loadPlanetData = async () => {
             try {
+                // 1) Try restore from local storage (set by Results page)
                 const storedPlanet = await storage.getData('results', 'selectedPlanet');
-                if (!storedPlanet) {
-                    console.warn('No planet data found');
-                    router.push('/results');
+
+                if (storedPlanet && Number.isFinite(routeId) && Number(storedPlanet?.id) === routeId) {
+                    setPlanet(storedPlanet);
+                    setLoading(false);
                     return;
                 }
-                setPlanet(storedPlanet);
-                setLoading(false);
+
+                // 2) Fallback: fetch detailed planet from backend by id (preserves session via cookie)
+                if (Number.isFinite(routeId)) {
+                    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+                    const response = await fetch(`${API_URL}/get-result/${routeId}`, {
+                        method: 'GET',
+                        credentials: 'include'
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const detailedData = await response.json();
+                    setPlanet(detailedData);
+                    // Save for quick back/forward navigation
+                    await storage.saveData('results', 'selectedPlanet', detailedData);
+                    setLoading(false);
+                    return;
+                }
+
+                console.warn('No planet data found');
+                router.push('/results');
             } catch (error) {
                 console.error('Error loading planet data:', error);
                 router.push('/results');
@@ -41,29 +73,85 @@ export default function PlanetDetail({ params }) {
         };
 
         loadPlanetData();
-    }, [router]);
+    }, [router, routeId]);
 
     useEffect(() => {
-        if (!planet) {
-            return;
+        if (!planet) return;
+
+        const pickNumber = (...keys) => {
+            for (const key of keys) {
+                const raw = planet?.[key];
+                const num = typeof raw === 'number' ? raw : parseFloat(raw);
+                if (Number.isFinite(num)) return num;
+            }
+            return undefined;
+        };
+
+        const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+
+        // Depth from planet data: koi_depth or pl_trandep (ppm)
+        const depthPpm = pickNumber('koi_depth', 'pl_trandep');
+        if (Number.isFinite(depthPpm)) {
+            const depthFrac = clamp(depthPpm / 1_000_000, 0.0001, 0.08);
+            setCurveConfig((prev) => ({ ...prev, depth: Number(depthFrac.toFixed(6)) }));
+        } else {
+            // Fallback: derive from predicted_confidence
+            const probabilityRaw = typeof planet.predicted_confidence === 'number'
+                ? planet.predicted_confidence
+                : parseFloat(planet.predicted_confidence);
+            const boundedProbability = Number.isFinite(probabilityRaw)
+                ? clamp(probabilityRaw, 0, 1)
+                : 0.7;
+            const minDepth = 0.005;
+            const maxDepth = 0.08;
+            const derivedDepthRaw = minDepth + (1 - boundedProbability) * (maxDepth - minDepth);
+            const derivedDepth = Number(clamp(derivedDepthRaw, minDepth, maxDepth).toFixed(4));
+            setCurveConfig((prev) => ({ ...prev, depth: derivedDepth }));
         }
 
-        // Use predicted_confidence from API response
-        const probabilityRaw = typeof planet.predicted_confidence === 'number'
-            ? planet.predicted_confidence
-            : parseFloat(planet.predicted_confidence);
-        const boundedProbability = Number.isFinite(probabilityRaw)
-            ? Math.min(Math.max(probabilityRaw, 0), 1)
-            : 0.7;
-        const derivedDepthRaw = 0.15 + (1 - boundedProbability) * 0.45;
-        const derivedDepth = Number(Math.min(0.75, Math.max(0.05, derivedDepthRaw)).toFixed(2));
+        // Duration from planet data: koi_duration or pl_trandur (hours), split 20/60/20
+        const durationHrs = pickNumber('koi_duration', 'pl_trandur');
+        if (Number.isFinite(durationHrs) && durationHrs > 0) {
+            const ingress = clamp(durationHrs * 0.2, 0.02, 3);
+            const flat = clamp(durationHrs * 0.6, 0.05, 8);
+            const envelope = clamp(Math.max(durationHrs * 0.6, 0.5), 0.2, 12);
+            setCurveConfig((prev) => ({
+                ...prev,
+                ingressDuration: Number(ingress.toFixed(2)),
+                egressDuration: Number(ingress.toFixed(2)),
+                flatDuration: Number(flat.toFixed(2)),
+                preTransitDuration: Number(envelope.toFixed(2)),
+                postTransitDuration: Number(envelope.toFixed(2))
+            }));
+        }
 
-        setCurveConfig((prev) => {
-            if (Math.abs(prev.depth - derivedDepth) < 0.01) {
-                return prev;
-            }
-            return { ...prev, depth: derivedDepth };
-        });
+        // Period to hours and show phase when available
+        const periodDays = pickNumber('koi_period', 'pl_orbper');
+        if (Number.isFinite(periodDays) && periodDays > 0) {
+            setUsePhase(true);
+            setPeriodHours(Number((periodDays * 24).toFixed(4)));
+        } else {
+            setUsePhase(false);
+            setPeriodHours(undefined);
+        }
+
+        // Baseline flux heuristic from stellar magnitude (if available).
+        const magnitude = pickNumber(
+            'koi_kepmag', 'kepmag', 'st_kepmag', 'st_vmag', 'Tmag', 'Vmag', 'phot_g_mean_mag'
+        );
+        if (Number.isFinite(magnitude)) {
+            // Map magnitude to a small baseline offset around 1.0 and clamp to control bounds.
+            const baselineGuess = clamp(1 + (12 - magnitude) * 0.05, 0.6, 1.4);
+            setCurveConfig((prev) => ({ ...prev, baseline: Number(baselineGuess.toFixed(2)) }));
+        }
+
+        // SNR from common fields if present.
+        const snrCandidate = pickNumber('koi_model_snr', 'koi_snr', 'pl_trandsnr', 'tran_snr', 'SNR', 'snr');
+        if (Number.isFinite(snrCandidate)) {
+            setSnr(clamp(snrCandidate, 1, 5000));
+        } else {
+            setSnr(0);
+        }
     }, [planet]);
 
     const updateValue = (key, value, boundaries = {}) => {
@@ -79,7 +167,7 @@ export default function PlanetDetail({ params }) {
         if (!Number.isFinite(value)) {
             return;
         }
-        const clamped = Math.max(0.05, Math.min(value, 2));
+        const clamped = Math.max(0.2, Math.min(value, 12));
         setCurveConfig((prev) => ({
             ...prev,
             preTransitDuration: clamped,
@@ -91,9 +179,22 @@ export default function PlanetDetail({ params }) {
         if (!Number.isFinite(value)) {
             return;
         }
-        const clamped = Math.max(0.04, Math.min(value, 0.6));
+        const clamped = Math.max(0.02, Math.min(value, 3));
         setCurveConfig((prev) => ({ ...prev, ingressDuration: clamped, egressDuration: clamped }));
     };
+
+    // Responsive chart width (stretches horizontally)
+    useEffect(() => {
+        const update = () => {
+            if (chartContainerRef.current) {
+                const w = chartContainerRef.current.clientWidth || 680;
+                setChartWidth(Math.min(1200, Math.max(360, w)));
+            }
+        };
+        update();
+        window.addEventListener('resize', update);
+        return () => window.removeEventListener('resize', update);
+    }, []);
 
     if (loading || !planet) {
         return (
@@ -210,31 +311,53 @@ export default function PlanetDetail({ params }) {
                             </p>
                         </div>
                         <div className="text-sm text-purple-400 bg-gray-800/70 border border-purple-300/20 rounded-lg px-4 py-2">
-                            Current depth: {(curveConfig.depth * 100).toFixed(0)}% flux drop · Slope {curveConfig.slope.toFixed(1)}
+                            Current depth: {(curveConfig.depth * 100).toFixed(1)}% flux drop
                         </div>
                     </div>
 
-                    <div className="mt-6">
-                        <TransitCurveControls
-                            config={curveConfig}
-                            onValueChange={updateValue}
-                            onIngressChange={updateIngress}
-                            onEnvelopeChange={updateSymmetricEnvelope}
-                        />
-                    </div>
+                    <details className="mt-6 group">
+                        <summary className="cursor-pointer select-none inline-flex items-center gap-2 text-purple-200/90 bg-gray-800/70 border border-purple-300/20 rounded-md px-3 py-2">
+                            <span className="font-medium">Curve settings</span>
+                            <span className="text-xs text-purple-300 group-open:hidden">(expand)</span>
+                            <span className="text-xs text-purple-300 hidden group-open:inline">(collapse)</span>
+                        </summary>
+                        <div className="mt-4">
+                            <TransitCurveControls
+                                config={curveConfig}
+                                onValueChange={updateValue}
+                                onIngressChange={updateIngress}
+                                onEnvelopeChange={updateSymmetricEnvelope}
+                            />
+                        </div>
+                    </details>
 
                     <div className="mt-8">
-                        <TransitLightCurve
-                            className="bg-gradient-to-br from-gray-950 to-gray-900"
-                            baseline={curveConfig.baseline}
-                            depth={curveConfig.depth}
-                            preTransitDuration={curveConfig.preTransitDuration}
-                            ingressDuration={curveConfig.ingressDuration}
-                            flatDuration={curveConfig.flatDuration}
-                            egressDuration={curveConfig.egressDuration}
-                            postTransitDuration={curveConfig.postTransitDuration}
-                            slope={curveConfig.slope}
-                        />
+                        <div ref={chartContainerRef} className="w-full">
+                            <TransitLightCurve
+                                className="mx-auto bg-gradient-to-br from-gray-950 to-gray-900 border border-purple-400/20"
+                                /* App theme-aligned colours */
+                                backgroundColor="transparent"
+                                axisColor="rgba(167, 139, 250, 0.8)"
+                                gridColor="rgba(167, 139, 250, 0.15)"
+                                labelColor="#E9D5FF"
+                                strokeColor="#C084FC"
+                                noiseColor="#60A5FA"
+                                width={chartWidth}
+                                height={360}
+                                baseline={curveConfig.baseline}
+                                depth={curveConfig.depth}
+                                preTransitDuration={curveConfig.preTransitDuration}
+                                ingressDuration={curveConfig.ingressDuration}
+                                flatDuration={curveConfig.flatDuration}
+                                egressDuration={curveConfig.egressDuration}
+                                postTransitDuration={curveConfig.postTransitDuration}
+                                slope={curveConfig.slope}
+                                displayAsPhase={usePhase}
+                                orbitalPeriodHours={periodHours}
+                                showNoise={Boolean(snr && snr > 0)}
+                                snr={snr}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
