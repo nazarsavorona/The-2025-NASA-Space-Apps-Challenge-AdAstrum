@@ -12,7 +12,7 @@ async def call_model(data_format: str, df: pd.DataFrame, hyperparams: dict) -> d
     Call the model service to make predictions.
     
     Args:
-        data_format: Format of the input data ("kepler", "k2", or "toi")
+        data_format: Format of the input data ("kepler", "k2", or "tess")
         df: Input dataframe with raw mission data
         hyperparams: Dictionary with prediction thresholds:
             - candidate_threshold: float

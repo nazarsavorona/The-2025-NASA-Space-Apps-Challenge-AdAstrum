@@ -101,7 +101,7 @@ def inference_cli() -> None:
     parser = argparse.ArgumentParser(
         description="Run LightGBM inference and append class predictions plus confidence scores to CSV data."
     )
-    parser.add_argument("dataset", help="Dataset key (e.g., kepler, k2, toi).")
+    parser.add_argument("dataset", help="Dataset key (e.g., kepler, k2, tess).")
     parser.add_argument("csv_path", help="Path to the CSV file to score.")
     parser.add_argument(
         "--model-dir",

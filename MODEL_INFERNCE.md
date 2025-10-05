@@ -27,13 +27,13 @@ A complete API endpoint has been implemented for the exoplanet classification AI
 Main service for working with ML models:
 
 **`ModelService` Class:**
-- Loading trained models (Kepler, K2, TOI)
+- Loading trained models (Kepler, K2, TESS)
 - Loading shared imputer for handling missing values
 - Data transformation from various formats to standardized features
 - `predict(df, format, hyperparams)` method - main prediction method
 
 **Key Features:**
-- Support for three formats: `"kepler"`, `"k2"`, `"toi"`
+- Support for three formats: `"kepler"`, `"k2"`, `"tess"`
 - Automatic handling of missing values (NaN)
 - Classification into three categories:
   - `0` - False Positive
@@ -72,7 +72,7 @@ FastAPI додаток з новими endpoints:
 **1. POST `/api/predict/` - JSON prediction**
 ```python
 {
-    "format": "kepler",  # or "k2", "toi"
+    "format": "kepler",  # or "k2", "tess"
     "data": [
         {
             "koi_period": 3.52,
@@ -170,7 +170,7 @@ def predict(self, df: pd.DataFrame, format_name: str, hyperparams: dict) -> pd.D
     """
     Arguments:
         df: DataFrame with mission data
-        format_name: "kepler", "k2" or "toi"
+        format_name: "kepler", "k2" or "tess"
         hyperparams: {
             "candidate_threshold": float,
             "confirmed_threshold": float
@@ -291,7 +291,7 @@ HTTP Request → FastAPI Endpoint → model_api.call_model()
 
 A fully functional API endpoint with the `predict()` method has been implemented, which:
 - Accepts DataFrame (from JSON or CSV)
-- Supports "kepler", "k2", "toi" formats
+- Supports "kepler", "k2", "tess" formats
 - Uses configurable hyperparams (candidate_threshold, confirmed_threshold)
 - Returns DataFrame with predictions and probabilities
 - Ready for production use

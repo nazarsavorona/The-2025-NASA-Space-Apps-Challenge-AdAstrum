@@ -81,7 +81,7 @@ Make predictions on exoplanet data provided as JSON.
 ```
 
 **Parameters:**
-- `format` (string, required): Dataset format - `"kepler"`, `"k2"`, or `"toi"`
+- `format` (string, required): Dataset format - `"kepler"`, `"k2"`, or `"tess"`
 - `data` (array, required): Array of objects with mission-specific column names
 - `hyperparams` (object, optional): Prediction thresholds
   - `candidate_threshold` (float, default: 0.4): Threshold for candidate class (0-1)
@@ -124,7 +124,7 @@ Make predictions on exoplanet data uploaded as a CSV file.
 
 **Parameters (Form Data):**
 - `file` (file, required): CSV file with exoplanet data
-- `format` (string, default: "kepler"): Dataset format - `"kepler"`, `"k2"`, or `"toi"`
+- `format` (string, default: "kepler"): Dataset format - `"kepler"`, `"k2"`, or `"tess"`
 - `candidate_threshold` (float, default: 0.4): Threshold for candidate class
 - `confirmed_threshold` (float, default: 0.7): Threshold for confirmed class
 
