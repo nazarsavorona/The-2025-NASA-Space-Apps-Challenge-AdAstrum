@@ -74,10 +74,8 @@ def clear_dynamic_folder():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-def save_as_csv(file: str, dictionary: dict):
+def save_as_csv(file: str, df : pd.DataFrame):
     path = Path(file)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(dictionary)
     df.to_csv(path, index=False)
 
 def read_csv_to_df(file: str):
