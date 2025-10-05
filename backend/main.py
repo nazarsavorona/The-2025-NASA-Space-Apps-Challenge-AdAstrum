@@ -195,14 +195,14 @@ def _filter_result_columns(df: pd.DataFrame):
             result_df[col] = df[col].values
 
     if "kepoi_name" in df.columns:
-        result_df["object_id"] = df["kepoi_name"].fillna(range(1, len(df) + 1))
+        result_df["object_id"] = df["kepoi_name"]
     elif "toi" in df.columns:
-        result_df["object_id"] = df["toi"].fillna(range(1, len(df) + 1))
+        result_df["object_id"] = df["toi"]
     elif "pl_name" in df.columns:
-        result_df["object_id"] = df["pl_name"].fillna(range(1, len(df) + 1))
+        result_df["object_id"] = df["pl_name"]
     else:
         result_df["object_id"] = range(1, len(df) + 1)
-    return result_df
+    return result_df.to_dict(orient="records")
 
 
 
