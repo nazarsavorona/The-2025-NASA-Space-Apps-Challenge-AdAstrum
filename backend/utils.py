@@ -2,6 +2,7 @@ import csv
 import json
 import os
 
+import pandas as pd
 from fastapi import HTTPException
 from starlette import status
 
@@ -67,3 +68,11 @@ def clear_dynamic_folder():
         return {"status": "ok", "message": f"Cleared {dynamic_dir}/"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+def save_as_csv(file: str, dictionary: dict):
+    df = pd.DataFrame(dictionary)
+    df.to_csv(file, index=False)
+
+def read_csv_to_df(file: str):
+    df = pd.read_csv(file)
+    return df

@@ -13,7 +13,7 @@ from model_api import call_model
 from preprocess import get_dataframe_format
 import uuid
 
-from utils import write_json
+from utils import write_json, save_as_csv, read_csv_to_df
 
 
 # Pydantic models for request/response validation
@@ -77,6 +77,9 @@ class PredictionRequest(BaseModel):
 
 def exoplanets_file(session_name: str):
     return f"dynamic/{session_name}-exoplanets.csv"
+
+def results_file(session_name: str):
+    return f"dynamic/{session_name}-results.csv"
 
 def hyperparams_file(session_name: str):
     return f"dynamic/{session_name}-hyperparams.json"
@@ -191,7 +194,10 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exs
         )
-    return call_model(data_format, df, hyperparams)
+    model_result = await call_model(data_format, df, hyperparams)
+    predictions = model_result["predictions"]
+    save_as_csv(results_file(session_id), predictions)
+    return model_result
 
 @app.post("/test-endpoint/")
 async def test_endpoint(file: UploadFile | None, hyperparams: dict | None=None):
@@ -213,7 +219,10 @@ async def test_endpoint(file: UploadFile | None, hyperparams: dict | None=None):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exs
         )
-    return call_model(data_format, df, hyperparams)
+    model_result = await call_model(data_format, df, hyperparams)
+    predictions = model_result["predictions"]
+    save_as_csv(results_file("test-user"), predictions)
+    return model_result
 
 
 @app.post("/api/predict/")
