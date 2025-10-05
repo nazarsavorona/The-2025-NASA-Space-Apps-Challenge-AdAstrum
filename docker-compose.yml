@@ -24,6 +24,31 @@ services:
       - "com.adastrum.service=api"
       - "com.adastrum.environment=development"
 
+  # Development Frontend Service with hot reload
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: adastrum-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/app:delegated
+      - /app/node_modules
+      - /app/.next
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - adastrum-network
+    labels:
+      - "com.adastrum.service=frontend"
+      - "com.adastrum.environment=development"
+
 networks:
   adastrum-network:
     driver: bridge
