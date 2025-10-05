@@ -1,4 +1,4 @@
-import json
+
 import logging
 from io import BytesIO
 from typing import Dict
@@ -188,6 +188,24 @@ def set_hyperparams(session_id: str, hyperparams: Dict):
     return status.HTTP_201_CREATED
 
 
+def _filter_result_columns(df: pd.DataFrame):
+    result_df = pd.DataFrame()
+    for col in ["id", "predicted_class", "predicted_confidence"]:
+        if col in df.columns:
+            result_df[col] = df[col].values
+
+    if "kepoi_name" in df.columns:
+        result_df["object_id"] = df["kepoi_name"].fillna(range(1, len(df) + 1))
+    elif "toi" in df.columns:
+        result_df["object_id"] = df["toi"].fillna(range(1, len(df) + 1))
+    elif "pl_name" in df.columns:
+        result_df["object_id"] = df["pl_name"].fillna(range(1, len(df) + 1))
+    else:
+        result_df["object_id"] = range(1, len(df) + 1)
+    return result_df
+
+
+
 @app.post("/predict/")
 async def get_result_for_file(request: Request, hyperparams: Dict):
     session_id = request.state.session_id
@@ -209,10 +227,19 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot detect dataframe format"
         )
-    model_result = await call_model(data_format, df, hyperparams)
-    predictions = model_result["predictions"]
-    save_as_csv(results_file(session_id), predictions)
-    return JSONResponse(content=model_result)
+    result_df = await call_model(data_format, df, hyperparams)
+    save_as_csv(results_file(session_id), result_df)
+    data_to_return = _filter_result_columns(result_df)
+    return JSONResponse(content= {
+        "status": "success",
+        "predictions": data_to_return,
+        "summary": {
+            "total": len(result_df),
+            "confirmed": int((result_df["predicted_class"] == 2).sum()),
+            "candidate": int((result_df["predicted_class"] == 1).sum()),
+            "false_positive": int((result_df["predicted_class"] == 0).sum()),
+        }
+    })
 
 
 @app.get("/get-result/{target_id}/")
@@ -257,10 +284,20 @@ async def test_endpoint(file: UploadFile | None, hyperparams: dict | None = None
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exs
         )
-    model_result = await call_model(data_format, df, hyperparams)
-    predictions = model_result["predictions"]
-    save_as_csv(results_file("test-user"), predictions)
-    return model_result
+    result_df = await call_model(data_format, df, hyperparams)
+    save_as_csv(results_file("test-user"), result_df)
+    data_to_return = _filter_result_columns(result_df)
+    return JSONResponse(content={
+        "status": "success",
+        "predictions": data_to_return,
+        "summary": {
+            "total": len(result_df),
+            "confirmed": int((result_df["predicted_class"] == 2).sum()),
+            "candidate": int((result_df["predicted_class"] == 1).sum()),
+            "false_positive": int((result_df["predicted_class"] == 0).sum()),
+        }
+    })
+
 
 
 @app.post("/api/predict/")
