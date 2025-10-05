@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import PlanetViewerComponent from '../../../components/PlanetViewerComponent';
 import TransitCurveControls from '../../../components/TransitCurveControls';
 import TransitLightCurve from '../../../components/TransitLightCurve';
 import { storage } from '../../../utils/storage';
@@ -148,10 +149,21 @@ export default function PlanetDetail({ params }) {
 
                 <div className="grid md:grid-cols-2 gap-8">
                     <div className="bg-gray-800/60 border border-purple-800/40 rounded-lg overflow-hidden shadow-2xl">
-                        <img
-                            src={planetImage}
-                            alt={planetName}
-                            className="w-full h-96 object-cover"
+                        <PlanetViewerComponent
+                            planetData={{
+                                name: 'Earth',
+                                radius: 5,
+                                textureUrl: '/textures/earth.jpg',
+                                hasAtmosphere: true,
+                                hasRings: false,
+                                moons: [
+                                    { size: 1, distance: 10, speed: 0.5, color: 0xaaaaaa },
+                                ],
+                            }}
+                            options={{
+                                autoRotate: true,
+                                showStars: true,
+                            }}
                         />
                     </div>
 
