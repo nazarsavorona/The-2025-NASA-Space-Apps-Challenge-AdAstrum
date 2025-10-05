@@ -194,14 +194,14 @@ def _filter_result_columns(df: pd.DataFrame):
         if col in df.columns:
             result_df[col] = df[col].values
 
-    if "kepoi_name" in df.columns:
-        result_df["object_id"] = df["kepoi_name"]
-    elif "toi" in df.columns:
-        result_df["object_id"] = df["toi"]
-    elif "pl_name" in df.columns:
-        result_df["object_id"] = df["pl_name"]
-    else:
-        result_df["object_id"] = range(1, len(df) + 1)
+    optional_cols = [
+        "kepoi_name", "toi", "pl_name",
+        "kepler_name", "tid", "hostname"
+    ]
+    for col in optional_cols:
+        if col in df:
+            result_df[col] = df[col]
+
     return result_df.to_dict(orient="records")
 
 
@@ -230,6 +230,7 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
     result_df = await call_model(data_format, df, hyperparams)
     save_as_csv(results_file(session_id), result_df)
     data_to_return = _filter_result_columns(result_df)
+
     return JSONResponse(content= {
         "status": "success",
         "predictions": data_to_return,
