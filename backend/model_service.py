@@ -2,6 +2,7 @@
 Model service for exoplanet classification predictions.
 """
 import os
+from pathlib import Path
 from typing import Dict
 
 import numpy as np
@@ -78,24 +79,35 @@ FEATURE_MAPS = {
     },
 }
 
-# Use environment variable or default to relative path (works both locally and in Docker)
-MODEL_DIR = os.getenv("MODEL_DIR", "../assets/models")
+# Resolve default model directory relative to the project root so it works from any CWD
+DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[1] / "assets" / "models"
+
+
+def _resolve_model_dir() -> Path:
+    """Determine the directory where trained models are stored."""
+    env_dir = os.getenv("MODEL_DIR")
+    if env_dir:
+        return Path(env_dir).expanduser()
+    return DEFAULT_MODEL_DIR
+
+
+MODEL_DIR = _resolve_model_dir()
 SHARED_IMPUTER_FILENAME = "shared_imputer.joblib"
 
 
 class ModelService:
     """Service for loading models and making predictions."""
 
-    def __init__(self, model_dir: str = MODEL_DIR):
-        self.model_dir = model_dir
+    def __init__(self, model_dir: Path | str = MODEL_DIR):
+        self.model_dir = Path(model_dir).expanduser()
         self.models = {}
         self.imputer = None
         self._load_imputer()
 
     def _load_imputer(self):
         """Load the shared imputer."""
-        imputer_path = os.path.join(self.model_dir, SHARED_IMPUTER_FILENAME)
-        if not os.path.exists(imputer_path):
+        imputer_path = self.model_dir / SHARED_IMPUTER_FILENAME
+        if not imputer_path.exists():
             raise FileNotFoundError(
                 f"Shared imputer not found at '{imputer_path}'. "
                 "Please train models first using v1.py"
@@ -105,8 +117,8 @@ class ModelService:
     def _load_model(self, format_name: str):
         """Load a specific model if not already loaded."""
         if format_name not in self.models:
-            model_path = os.path.join(self.model_dir, f"{format_name}_model.joblib")
-            if not os.path.exists(model_path):
+            model_path = self.model_dir / f"{format_name}_model.joblib"
+            if not model_path.exists():
                 raise FileNotFoundError(
                     f"Model for '{format_name}' not found at '{model_path}'. "
                     "Please train models first using v1.py"

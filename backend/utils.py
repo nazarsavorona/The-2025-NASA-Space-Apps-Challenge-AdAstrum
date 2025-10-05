@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+from pathlib import Path
 
 import pandas as pd
 from fastapi import HTTPException
@@ -19,7 +20,9 @@ def read_json(file: str) -> dict:
 
 def write_json(file: str, data: dict):
     try:
-        with open(file, "w") as f:
+        path = Path(file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as f:
             json.dump(data, f, indent=4)
     except Exception as exs:
         raise HTTPException(
@@ -41,7 +44,9 @@ def read_csv(file: str):
 
 def write_csv(file: str, data: list, fieldnames: list):
     try:
-        with open(file, "w", newline="") as f:
+        path = Path(file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(data)
@@ -70,8 +75,10 @@ def clear_dynamic_folder():
         return {"status": "error", "message": str(e)}
 
 def save_as_csv(file: str, dictionary: dict):
+    path = Path(file)
+    path.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(dictionary)
-    df.to_csv(file, index=False)
+    df.to_csv(path, index=False)
 
 def read_csv_to_df(file: str):
     df = pd.read_csv(file)
