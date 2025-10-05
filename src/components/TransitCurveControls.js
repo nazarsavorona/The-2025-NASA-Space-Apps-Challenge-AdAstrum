@@ -152,6 +152,33 @@ export default function TransitCurveControls({
                     Applies before and after the transit equally.
                 </p>
             </label>
+
+            <label className="flex flex-col gap-2 text-sm lg:col-span-2">
+                <span className="text-gray-300 uppercase tracking-widest text-xs">Slope (curve smoothness)</span>
+                <div className="flex items-center gap-3">
+                    <input
+                        type="range"
+                        min="1"
+                        max="4"
+                        step="0.1"
+                        value={config.slope}
+                        onChange={handleValue('slope', { min: 1, max: 4 })}
+                        className="w-full accent-blue-400"
+                    />
+                    <input
+                        type="number"
+                        min="1"
+                        max="4"
+                        step="0.1"
+                        value={config.slope}
+                        onChange={handleValue('slope', { min: 1, max: 4 })}
+                        className="w-20 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-right"
+                    />
+                </div>
+                <p className="text-xs text-gray-500">
+                    Higher values add smoother S-shaped ingress and egress transitions.
+                </p>
+            </label>
         </div>
     );
 }

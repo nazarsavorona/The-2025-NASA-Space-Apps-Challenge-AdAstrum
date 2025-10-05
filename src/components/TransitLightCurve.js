@@ -1,5 +1,25 @@
 const DEFAULT_PADDING = { top: 24, right: 32, bottom: 48, left: 60 };
 
+const easeInOut = (t, power) => {
+    if (t <= 0) {
+        return 0;
+    }
+    if (t >= 1) {
+        return 1;
+    }
+
+    const p = Math.max(1, power);
+    if (p === 1) {
+        return t;
+    }
+
+    if (t < 0.5) {
+        return 0.5 * Math.pow(t * 2, p);
+    }
+
+    return 1 - 0.5 * Math.pow((1 - t) * 2, p);
+};
+
 function buildTransitPoints({
     baseline,
     depth,
@@ -7,7 +27,8 @@ function buildTransitPoints({
     ingressDuration,
     flatDuration,
     egressDuration,
-    postTransitDuration
+    postTransitDuration,
+    slope
 }) {
     const sanitize = (value, fallback = 0) => {
         if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
@@ -33,54 +54,48 @@ function buildTransitPoints({
         ];
     }
 
-    const points = [];
+    const segments = [
+        { duration: pre, start: baseLineSafe, end: baseLineSafe, smooth: false },
+        { duration: ingress, start: baseLineSafe, end: baseLineSafe - depthSafe, smooth: true },
+        { duration: flat, start: baseLineSafe - depthSafe, end: baseLineSafe - depthSafe, smooth: false },
+        { duration: egress, start: baseLineSafe - depthSafe, end: baseLineSafe, smooth: true },
+        { duration: post, start: baseLineSafe, end: baseLineSafe, smooth: false }
+    ];
+
+    const points = [[0, baseLineSafe]];
     let timeCursor = 0;
+    const sampleCount = Math.max(4, Math.round(10 * Math.max(1, slope)));
 
-    const pushPoint = (time, value) => {
-        points.push([time, value]);
-    };
+    segments.forEach(({ duration, start, end, smooth }) => {
+        if (duration <= 0) {
+            return;
+        }
 
-    pushPoint(0, baseLineSafe);
-
-    if (pre > 0) {
-        timeCursor += pre;
-        pushPoint(timeCursor, baseLineSafe);
-    }
-
-    if (ingress > 0) {
         const startTime = timeCursor;
-        pushPoint(startTime, baseLineSafe);
-        timeCursor += ingress;
-        pushPoint(timeCursor, baseLineSafe - depthSafe);
-    } else {
-        pushPoint(timeCursor, baseLineSafe - depthSafe);
-    }
+        const lastPoint = points[points.length - 1];
+        if (Math.abs(lastPoint[0] - startTime) > 1e-6 || Math.abs(lastPoint[1] - start) > 1e-6) {
+            points.push([startTime, start]);
+        }
 
-    if (flat > 0) {
-        const startTime = timeCursor;
-        pushPoint(startTime, baseLineSafe - depthSafe);
-        timeCursor += flat;
-        pushPoint(timeCursor, baseLineSafe - depthSafe);
-    }
+        if (!smooth || Math.abs(start - end) < 1e-6) {
+            timeCursor += duration;
+            points.push([timeCursor, end]);
+            return;
+        }
 
-    if (egress > 0) {
-        const startTime = timeCursor;
-        pushPoint(startTime, baseLineSafe - depthSafe);
-        timeCursor += egress;
-        pushPoint(timeCursor, baseLineSafe);
-    } else {
-        pushPoint(timeCursor, baseLineSafe);
-    }
+        for (let step = 1; step <= sampleCount; step += 1) {
+            const progress = step / sampleCount;
+            const eased = easeInOut(progress, slope);
+            const time = startTime + progress * duration;
+            const value = start + (end - start) * eased;
+            points.push([time, value]);
+        }
 
-    if (post > 0) {
-        const startTime = timeCursor;
-        pushPoint(startTime, baseLineSafe);
-        timeCursor += post;
-        pushPoint(timeCursor, baseLineSafe);
-    }
+        timeCursor += duration;
+    });
 
-    if (points[points.length - 1][0] !== timeCursor || points[points.length - 1][1] !== baseLineSafe) {
-        pushPoint(timeCursor, baseLineSafe);
+    if (points[points.length - 1][0] < totalDuration - 1e-6) {
+        points.push([totalDuration, baseLineSafe]);
     }
 
     const deduped = points.filter((point, index) => {
@@ -111,6 +126,7 @@ export default function TransitLightCurve({
     flatDuration = 0.18,
     egressDuration = ingressDuration,
     postTransitDuration = 0.35,
+    slope = 2.2,
     strokeColor = '#f6a23a',
     backgroundColor = '#040307',
     axisColor = 'rgba(255, 196, 120, 0.75)',
@@ -138,7 +154,8 @@ export default function TransitLightCurve({
         ingressDuration,
         flatDuration,
         egressDuration,
-        postTransitDuration
+        postTransitDuration,
+        slope
     });
 
     const lowestValue = Math.min(...points.map(([, value]) => value));
