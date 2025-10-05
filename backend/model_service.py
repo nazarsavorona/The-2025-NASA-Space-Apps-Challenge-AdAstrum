@@ -233,7 +233,10 @@ class ModelService:
         result_df["predicted_class"] = classes
         result_df["predicted_confidence"] = probabilities
         result_df["id"] = range(1, len(classes) + 1)
+        result_df = result_df.replace([np.nan, np.inf, -np.inf], None)
 
+        cols = ["id"] + [col for col in result_df.columns if col != "id"]
+        result_df = result_df[cols]
         return result_df
 
 

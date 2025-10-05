@@ -24,7 +24,7 @@ def get_dataframe_format(df: pd.DataFrame) -> str:
         matched_columns = [col for col in expected_columns if col in dataset_columns]
         if len(matched_columns) == len(expected_columns):
             return current_format["name"]
-        if matched_columns > closest_count:
+        if len(matched_columns) > closest_count:
             closest_count = matched_columns
             closest = current_format
 
