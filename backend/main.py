@@ -8,6 +8,7 @@ from fastapi import APIRouter, FastAPI, UploadFile, HTTPException, status, Reque
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from pydantic import BaseModel, Field
+from starlette.responses import FileResponse
 
 from model_api import call_model
 from preprocess import get_dataframe_format
@@ -198,6 +199,30 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
     predictions = model_result["predictions"]
     save_as_csv(results_file(session_id), predictions)
     return model_result
+
+@app.get("/get-result/{target_id}/")
+async def get_result(request: Request, target_id: int):
+    session_id = request.state.session_id
+    df = read_csv_to_df(results_file(session_id))
+    if "id" not in df.columns:
+        raise HTTPException(status_code=400, detail="Results file missing 'id' column")
+    record = df[df["id"] == target_id]
+
+    if record.empty:
+        raise HTTPException(status_code=404, detail="Record not found")
+    return record.iloc[0].to_dict()
+
+
+@app.get("/download/")
+async def test_endpoint(request: Request):
+    session_id = request.state.session_id
+    return FileResponse(
+        path=results_file(session_id),
+        filename="file.csv",
+        media_type="text/csv"
+    )
+
+
 
 @app.post("/test-endpoint/")
 async def test_endpoint(file: UploadFile | None, hyperparams: dict | None=None):

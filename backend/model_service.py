@@ -220,6 +220,7 @@ class ModelService:
         result_df = df.copy()
         result_df["predicted_class"] = classes
         result_df["predicted_confidence"] = probabilities
+        result_df["id"] = range(1, len(classes) + 1)
 
         return result_df
 
