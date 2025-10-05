@@ -1,6 +1,6 @@
 'use client';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import PlanetViewerComponent from '../../../components/PlanetViewerComponent';
 import TransitCurveControls from '../../../components/TransitCurveControls';
 import TransitLightCurve from '../../../components/TransitLightCurve';
