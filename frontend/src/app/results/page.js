@@ -8,18 +8,30 @@ export default function Results() {
     const [loading, setLoading] = useState(true);
     const router = useRouter();
 
+    const columnMappings = {
+        kepoi_name: 'KOI Name',
+        toi: 'TESS Object of Interest',
+        pl_name: 'Planet Name',
+        kepler_name: 'Kepler Name',
+        tid: 'TESS Input Catalog ID',
+        hostname: 'Host Name',
+        predicted_class: 'Predicted Class',
+        predicted_confidence: 'Confidence'
+    };
+
     useEffect(() => {
         loadResults();
     }, []);
 
     const loadResults = async () => {
         try {
-            const storedResults = await storage.getData('results', 'classification');
-            if (!storedResults) {
+            const storedData = await storage.getData('results', 'predictionResults');
+            if (!storedData || !storedData.predictions) {
+                console.warn('No prediction results found');
                 router.push('/');
                 return;
             }
-            setResults(storedResults);
+            setResults(storedData.predictions);
             setLoading(false);
         } catch (error) {
             console.error('Error loading results:', error);
@@ -34,87 +46,128 @@ export default function Results() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 flex items-center justify-center">
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 to-purple-950 flex items-center justify-center">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading results...</p>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400 mx-auto"></div>
+                    <p className="mt-4 text-purple-300">Loading results...</p>
                 </div>
             </div>
         );
     }
 
+    const getAvailableColumns = () => {
+        if (results.length === 0) return [];
+        const firstResult = results[0];
+        const columns = [];
+        const orderedKeys = ['kepoi_name', 'pl_name', 'kepler_name', 'toi', 'tid', 'hostname', 'predicted_class', 'predicted_confidence'];
+        orderedKeys.forEach(key => {
+            if (key in firstResult) columns.push(key);
+        });
+        Object.keys(firstResult).forEach(key => {
+            if (!columns.includes(key) && key !== 'id') {
+                columns.push(key);
+            }
+        });
+        return columns;
+    };
+
+    const formatColumnName = (key) => {
+        return columnMappings[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    };
+
+    const formatCellValue = (key, value) => {
+        if (value === null || value === undefined) return 'N/A';
+
+        if (key === 'predicted_confidence') {
+            return (
+                <div className="flex items-center">
+                    <div className="w-28 bg-purple-900/40 rounded-full h-2.5 mr-2">
+                        <div
+                            className="bg-gradient-to-r from-purple-400 to-pink-500 h-2.5 rounded-full"
+                            style={{ width: `${value * 100}%` }}
+                        ></div>
+                    </div>
+                    <span className="text-purple-200 text-xs">{(value * 100).toFixed(0)}%</span>
+                </div>
+            );
+        }
+
+        if (key === 'predicted_class') {
+            const classLabels = ['False Positive', 'Candidate', 'Confirmed'];
+            return <span className="text-purple-100">{classLabels[value] || value}</span>;
+        }
+
+        if (typeof value === 'number') {
+            return <span className="text-purple-100">{value.toFixed(4)}</span>;
+        }
+
+        return <span className="text-purple-100">{value}</span>;
+    };
+
+    const availableColumns = getAvailableColumns();
+
     return (
-        // <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 p-8">
-        //     <div className="max-w-6xl mx-auto">
-        //         <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">
-        //             Classification Results
-        //         </h1>
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-black p-10 text-purple-100">
+            <div className="max-w-7xl mx-auto">
+                <div className="flex justify-between items-center mb-10">
+                    <button onClick={() => router.push('/')} className="text-sm text-purple-300 hover:text-white">
+                        &lt; Back
+                    </button>
+                    <button
+                        onClick={async () => {
+                            await storage.clearStore('results');
+                            router.push('/');
+                        }}
+                        className="border border-purple-400 px-5 py-2 text-sm hover:bg-purple-600/20 transition"
+                    >
+                        New Classification
+                    </button>
+                </div>
 
-        //         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        //             <table className="min-w-full">
-        //                 <thead className="bg-indigo-500 text-white">
-        //                     <tr>
-        //                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-        //                             Planet Name
-        //                         </th>
-        //                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-        //                             Type
-        //                         </th>
-        //                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-        //                             Probability
-        //                         </th>
-        //                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-        //                             Distance
-        //                         </th>
-        //                     </tr>
-        //                 </thead>
-        //                 <tbody className="bg-white divide-y divide-gray-200">
-        //                     {results.map((planet) => (
-        //                         <tr
-        //                             key={planet.id}
-        //                             onClick={() => handleRowClick(planet)}
-        //                             className="hover:bg-indigo-50 cursor-pointer transition-colors"
-        //                         >
-        //                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-        //                                 {planet.name}
-        //                             </td>
-        //                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-        //                                 {planet.type}
-        //                             </td>
-        //                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-        //                                 <div className="flex items-center">
-        //                                     <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
-        //                                         <div
-        //                                             className="bg-gradient-to-r from-green-400 to-blue-500 h-2.5 rounded-full"
-        //                                             style={{ width: `${planet.probability * 100}%` }}
-        //                                         ></div>
-        //                                     </div>
-        //                                     <span>{(planet.probability * 100).toFixed(0)}%</span>
-        //                                 </div>
-        //                             </td>
-        //                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-        //                                 {planet.distance}
-        //                             </td>
-        //                         </tr>
-        //                     ))}
-        //                 </tbody>
-        //             </table>
-        //         </div>
+                <h1 className="text-2xl font-mono tracking-widest text-purple-100 mb-2">
+                    CLASSIFICATION RESULTS
+                </h1>
+                <p className="text-sm text-purple-400 mb-8">File: exoplanets.csv | {results.length} Exoplanets found</p>
 
-        //         <div className="mt-8 flex justify-center">
-        //             <button
-        //                 onClick={async () => {
-        //                     await storage.clearStore('results');
-        //                     router.push('/');
-        //                 }}
-        //                 className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-        //             >
-        //                 Start New Classification
-        //             </button>
-        //         </div>
-        //     </div>
-        // </div>
-
-        <h1>Results</h1>
+                <div className="bg-gradient-to-br from-gray-900/60 to-purple-950/60 border border-purple-800/40 rounded-xl shadow-2xl overflow-x-auto">
+                    <table className="min-w-full font-mono text-sm">
+                        <thead className="border-b border-purple-700/50 text-purple-400">
+                            <tr>
+                                {availableColumns.map((key) => (
+                                    <th key={key} className="px-6 py-3 text-left font-normal uppercase tracking-wider">
+                                        {formatColumnName(key)}
+                                    </th>
+                                ))}
+                                <th className="px-6 py-3 text-left font-normal uppercase tracking-wider">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {results.map((row, idx) => (
+                                <tr
+                                    key={row.id || idx}
+                                    className="hover:bg-purple-900/30 transition"
+                                >
+                                    {availableColumns.map((key) => (
+                                        <td key={key} className="px-6 py-4 whitespace-nowrap">
+                                            {formatCellValue(key, row[key])}
+                                        </td>
+                                    ))}
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <button
+                                            onClick={() => handleRowClick(row)}
+                                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-xs transition-colors"
+                                        >
+                                            View Details
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     )
 };
