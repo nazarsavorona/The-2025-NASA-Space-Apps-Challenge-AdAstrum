@@ -5,6 +5,7 @@ import PlanetViewerComponent from '../../../components/PlanetViewerComponent';
 import TransitCurveControls from '../../../components/TransitCurveControls';
 import TransitLightCurve from '../../../components/TransitLightCurve';
 import { storage } from '../../../utils/storage';
+import FeatureImportance from "@/app/graphs/FeatureImportance";
 
 const planetImage = 'https://images.unsplash.com/photo-1614313913007-2b4ae8ce32ec?w=800';
 
@@ -358,6 +359,10 @@ export default function PlanetDetail() {
                                 snr={snr}
                             />
                         </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-center">
+                        <FeatureImportance />
                     </div>
                 </div>
             </div>
