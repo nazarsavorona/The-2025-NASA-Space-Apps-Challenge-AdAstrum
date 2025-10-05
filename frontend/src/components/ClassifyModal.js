@@ -1,4 +1,5 @@
 'use client';
+import { storage } from '@/utils/storage';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -46,6 +47,11 @@ export default function ClassifyModal({ onClose }) {
             }
             const data = await response.json();
             console.log('Prediction result:', data);
+
+            // Store prediction results in IndexedDB
+            await storage.saveData('results', 'predictionResults', data);
+            console.log('Results saved to IndexedDB 2');
+
             router.push('/results');
         } catch (error) {
             console.error('Error during prediction:', error);

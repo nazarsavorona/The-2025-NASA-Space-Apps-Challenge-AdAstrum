@@ -1,75 +1,15 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import TransitLightCurve from '../../../components/TransitLightCurve';
 import TransitCurveControls from '../../../components/TransitCurveControls';
+import TransitLightCurve from '../../../components/TransitLightCurve';
+import { storage } from '../../../utils/storage';
 
-const planetImages = {
-    'Super Earth': 'https://images.unsplash.com/photo-1614732414444-096e5f1122d5?w=800',
-    'Terrestrial': 'https://images.unsplash.com/photo-1614313913007-2b4ae8ce32ec?w=800',
-    'Hot Jupiter': 'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?w=800',
-    'Sub-Neptune': 'https://images.unsplash.com/photo-1614728263952-84ea256f9679?w=800'
-};
-
-const planetDetails = {
-    'Kepler-452b': {
-        mass: '5 Earth masses',
-        radius: '1.63 Earth radii',
-        orbitalPeriod: '385 days',
-        temperature: '265 K',
-        star: 'Kepler-452',
-        discovered: '2015',
-        description: 'Often called Earth 2.0, this exoplanet orbits within the habitable zone of a Sun-like star.'
-    },
-    'Proxima Centauri b': {
-        mass: '1.17 Earth masses',
-        radius: '1.1 Earth radii',
-        orbitalPeriod: '11.2 days',
-        temperature: '234 K',
-        star: 'Proxima Centauri',
-        discovered: '2016',
-        description: 'The closest known exoplanet to Earth, orbiting our nearest stellar neighbor.'
-    },
-    'TRAPPIST-1e': {
-        mass: '0.62 Earth masses',
-        radius: '0.92 Earth radii',
-        orbitalPeriod: '6.1 days',
-        temperature: '251 K',
-        star: 'TRAPPIST-1',
-        discovered: '2017',
-        description: 'One of seven Earth-sized planets in the TRAPPIST-1 system, potentially habitable.'
-    },
-    'HD 209458 b': {
-        mass: '0.69 Jupiter masses',
-        radius: '1.38 Jupiter radii',
-        orbitalPeriod: '3.5 days',
-        temperature: '1130 K',
-        star: 'HD 209458',
-        discovered: '1999',
-        description: 'One of the first transiting exoplanets discovered, nicknamed "Osiris".'
-    },
-    'Gliese 667Cc': {
-        mass: '3.8 Earth masses',
-        radius: '1.5 Earth radii',
-        orbitalPeriod: '28.1 days',
-        temperature: '277 K',
-        star: 'Gliese 667C',
-        discovered: '2011',
-        description: 'A super-Earth located in the habitable zone of a red dwarf star.'
-    },
-    'K2-18b': {
-        mass: '8.6 Earth masses',
-        radius: '2.6 Earth radii',
-        orbitalPeriod: '33 days',
-        temperature: '265 K',
-        star: 'K2-18',
-        discovered: '2015',
-        description: 'A sub-Neptune with potential water vapor in its atmosphere, possibly habitable.'
-    }
-};
+const planetImage = 'https://images.unsplash.com/photo-1614313913007-2b4ae8ce32ec?w=800';
 
 export default function PlanetDetail({ params }) {
     const [planet, setPlanet] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [curveConfig, setCurveConfig] = useState({
         baseline: 1,
         depth: 0.35,
@@ -83,12 +23,23 @@ export default function PlanetDetail({ params }) {
     const router = useRouter();
 
     useEffect(() => {
-        const storedPlanet = sessionStorage.getItem('selectedPlanet');
-        if (!storedPlanet) {
-            router.push('/results');
-            return;
-        }
-        setPlanet(JSON.parse(storedPlanet));
+        const loadPlanetData = async () => {
+            try {
+                const storedPlanet = await storage.getData('results', 'selectedPlanet');
+                if (!storedPlanet) {
+                    console.warn('No planet data found');
+                    router.push('/results');
+                    return;
+                }
+                setPlanet(storedPlanet);
+                setLoading(false);
+            } catch (error) {
+                console.error('Error loading planet data:', error);
+                router.push('/results');
+            }
+        };
+
+        loadPlanetData();
     }, [router]);
 
     useEffect(() => {
@@ -96,9 +47,10 @@ export default function PlanetDetail({ params }) {
             return;
         }
 
-        const probabilityRaw = typeof planet.probability === 'number'
-            ? planet.probability
-            : parseFloat(planet.probability);
+        // Use predicted_confidence from API response
+        const probabilityRaw = typeof planet.predicted_confidence === 'number'
+            ? planet.predicted_confidence
+            : parseFloat(planet.predicted_confidence);
         const boundedProbability = Number.isFinite(probabilityRaw)
             ? Math.min(Math.max(probabilityRaw, 0), 1)
             : 0.7;
@@ -142,94 +94,110 @@ export default function PlanetDetail({ params }) {
         setCurveConfig((prev) => ({ ...prev, ingressDuration: clamped, egressDuration: clamped }));
     };
 
-    if (!planet) {
-        return <div>Loading...</div>;
+    if (loading || !planet) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-black flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400 mx-auto"></div>
+                    <p className="mt-4 text-purple-300">Loading planet details...</p>
+                </div>
+            </div>
+        );
     }
 
-    const details = planetDetails[planet.name] || {
-        mass: 'Unknown',
-        radius: 'Unknown',
-        orbitalPeriod: 'Unknown',
-        temperature: 'Unknown',
-        star: 'Unknown',
-        discovered: 'Unknown',
-        description: 'Details for this exoplanet are currently being researched.'
+    // Get classification label
+    const getClassLabel = (classValue) => {
+        const classLabels = ['False Positive', 'Candidate', 'Confirmed'];
+        return classLabels[classValue] || 'Unknown';
     };
 
+    // Format field names
+    const formatFieldName = (key) => {
+        return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    };
+
+    // Format field values
+    const formatValue = (value) => {
+        if (value === null || value === undefined) return 'N/A';
+        if (typeof value === 'number') {
+            return value.toFixed(4);
+        }
+        return String(value);
+    };
+
+    // Get planet name from available fields
+    const planetName = planet.pl_name || planet.kepoi_name || planet.kepler_name || planet.hostname || `Planet ${planet.id}`;
+    const classLabel = getClassLabel(planet.predicted_class);
+    const confidence = planet.predicted_confidence || 0;
+
+    // Fields to exclude from the details list
+    const excludeFields = ['id', 'predicted_class', 'predicted_confidence', 'pl_name', 'kepoi_name', 'kepler_name'];
+
+    // Get all other fields dynamically
+    const detailFields = Object.keys(planet).filter(key => !excludeFields.includes(key));
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 text-white p-8">
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-black text-purple-100 p-8">
             <div className="max-w-6xl mx-auto">
                 <button
                     onClick={() => router.push('/results')}
-                    className="mb-6 px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                    className="mb-6 px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
                 >
                     ← Back to Results
                 </button>
 
                 <div className="grid md:grid-cols-2 gap-8">
-                    <div className="bg-gray-800 rounded-lg overflow-hidden shadow-2xl">
+                    <div className="bg-gray-800/60 border border-purple-800/40 rounded-lg overflow-hidden shadow-2xl">
                         <img
-                            src={planetImages[planet.type] || planetImages['Terrestrial']}
-                            alt={planet.name}
+                            src={planetImage}
+                            alt={planetName}
                             className="w-full h-96 object-cover"
                         />
                     </div>
 
-                    <div className="bg-gray-800 rounded-lg p-8 shadow-2xl">
-                        <h1 className="text-4xl font-bold mb-4">{planet.name}</h1>
+                    <div className="bg-gray-800/60 border border-purple-800/40 rounded-lg p-8 shadow-2xl">
+                        <h1 className="text-4xl font-bold mb-4 text-purple-100">{planetName}</h1>
                         <div className="mb-6">
-                            <span className="inline-block px-3 py-1 bg-blue-600 rounded-full text-sm">
-                                {planet.type}
+                            <span className={`inline-block px-3 py-1 rounded-full text-sm ${planet.predicted_class === 2 ? 'bg-green-600' :
+                                planet.predicted_class === 1 ? 'bg-yellow-600' :
+                                    'bg-red-600'
+                                }`}>
+                                {classLabel}
                             </span>
-                            <span className="ml-2 text-gray-400">
-                                Classification: {(planet.probability * 100).toFixed(0)}% confidence
+                            <span className="ml-2 text-purple-400">
+                                Confidence: {(confidence * 100).toFixed(1)}%
                             </span>
                         </div>
 
-                        <p className="text-gray-300 mb-6">{details.description}</p>
+                        <div className="mb-4">
+                            <div className="w-full bg-purple-900/40 rounded-full h-3">
+                                <div
+                                    className="bg-gradient-to-r from-purple-400 to-pink-500 h-3 rounded-full transition-all duration-500"
+                                    style={{ width: `${confidence * 100}%` }}
+                                ></div>
+                            </div>
+                        </div>
 
-                        <div className="space-y-3">
-                            <div className="flex justify-between border-b border-gray-700 pb-2">
-                                <span className="text-gray-400">Mass:</span>
-                                <span>{details.mass}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-700 pb-2">
-                                <span className="text-gray-400">Radius:</span>
-                                <span>{details.radius}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-700 pb-2">
-                                <span className="text-gray-400">Orbital Period:</span>
-                                <span>{details.orbitalPeriod}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-700 pb-2">
-                                <span className="text-gray-400">Temperature:</span>
-                                <span>{details.temperature}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-700 pb-2">
-                                <span className="text-gray-400">Host Star:</span>
-                                <span>{details.star}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-700 pb-2">
-                                <span className="text-gray-400">Distance from Earth:</span>
-                                <span>{planet.distance}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">Year Discovered:</span>
-                                <span>{details.discovered}</span>
-                            </div>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {detailFields.map((key) => (
+                                <div key={key} className="flex justify-between border-b border-purple-700/30 pb-2">
+                                    <span className="text-purple-400 font-mono text-sm">{formatFieldName(key)}:</span>
+                                    <span className="text-purple-100 text-sm">{formatValue(planet[key])}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
 
-                <div className="mt-12 bg-gray-900/80 border border-blue-400/20 rounded-2xl p-8 shadow-2xl">
+                <div className="mt-12 bg-gray-900/80 border border-purple-400/20 rounded-2xl p-8 shadow-2xl">
                     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                         <div>
-                            <h2 className="text-2xl font-semibold">Transit Light Curve</h2>
-                            <p className="text-sm text-gray-400 mt-1">
+                            <h2 className="text-2xl font-semibold text-purple-100">Transit Light Curve</h2>
+                            <p className="text-sm text-purple-400 mt-1">
                                 Adjust the parameters to simulate how this planet dims its host star during transit.
                             </p>
                         </div>
-                        <div className="text-sm text-gray-400 bg-gray-800/70 border border-blue-300/20 rounded-lg px-4 py-2">
+                        <div className="text-sm text-purple-400 bg-gray-800/70 border border-purple-300/20 rounded-lg px-4 py-2">
                             Current depth: {(curveConfig.depth * 100).toFixed(0)}% flux drop · Slope {curveConfig.slope.toFixed(1)}
                         </div>
                     </div>
