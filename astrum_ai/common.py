@@ -36,6 +36,7 @@ class MissionSpec:
     negative_labels: Sequence[str]
     candidate_labels: Sequence[str]
     feature_map: Dict[str, str]
+    dataset_type: str
     requires_default_flag: bool = False
 
     def resolve_path(self, datasets_dir: Path) -> Path:
@@ -68,6 +69,7 @@ MISSION_SPECS: Sequence[MissionSpec] = [
             "stellar_mass": "koi_smass",
             "stellar_metallicity": "koi_smet",
         },
+        dataset_type="kepler",
     ),
     MissionSpec(
         name="k2",
@@ -92,6 +94,7 @@ MISSION_SPECS: Sequence[MissionSpec] = [
             "stellar_mass": "st_mass",
             "stellar_metallicity": "st_met",
         },
+        dataset_type="toi_k2",
         requires_default_flag=True,
     ),
     MissionSpec(
@@ -117,8 +120,13 @@ MISSION_SPECS: Sequence[MissionSpec] = [
             "stellar_mass": "st_mass",
             "stellar_metallicity": "st_met",
         },
+        dataset_type="toi_k2",
     ),
 ]
+
+
+MODEL_FILENAME = "shared_model.joblib"
+PREPROCESSOR_FILENAME = "shared_preprocessors.joblib"
 
 
 def iter_csv_records(path: Path) -> Iterable[Dict[str, str]]:
