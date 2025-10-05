@@ -61,3 +61,5 @@ data/*/
 !planet-viewer/templates/*.jpg
 __pycache__/
 *.DS_Store
+
+/backend/dynamic

@@ -1,3 +1,4 @@
+import json
 import logging
 from io import BytesIO
 from typing import Dict
@@ -8,7 +9,7 @@ from fastapi import APIRouter, FastAPI, UploadFile, HTTPException, status, Reque
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from pydantic import BaseModel, Field
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, JSONResponse
 
 from model_api import call_model
 from preprocess import get_dataframe_format
@@ -79,17 +80,22 @@ class PredictionRequest(BaseModel):
 def exoplanets_file(session_name: str):
     return f"dynamic/{session_name}-exoplanets.csv"
 
+
 def results_file(session_name: str):
     return f"dynamic/{session_name}-results.csv"
 
+
 def hyperparams_file(session_name: str):
     return f"dynamic/{session_name}-hyperparams.json"
+
+
 app = FastAPI()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
 
 @app.middleware("http")
 async def add_session_id(request: Request, call_next):
@@ -106,9 +112,12 @@ async def add_session_id(request: Request, call_next):
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=True
+        secure=True,
+        samesite="none"
     )
     return response
+
+
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -130,6 +139,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 @app.get("/")
 def read_root():
     return {"message": "Hello, AdAstrum!"}
@@ -176,6 +187,7 @@ def set_hyperparams(session_id: str, hyperparams: Dict):
     write_json(hyperparams_f, hyperparams)
     return status.HTTP_201_CREATED
 
+
 @app.post("/predict/")
 async def get_result_for_file(request: Request, hyperparams: Dict):
     session_id = request.state.session_id
@@ -184,21 +196,24 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
     try:
         df = pd.read_csv(planet_file, comment="#")
     except Exception as exs:
+        logger.info(exs)
         return HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=exs
+            detail="Cannot read planet file"
         )
     try:
         data_format = get_dataframe_format(df)
     except Exception as exs:
+        logger.info(exs)
         return HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=exs
+            detail="Cannot detect dataframe format"
         )
     model_result = await call_model(data_format, df, hyperparams)
     predictions = model_result["predictions"]
     save_as_csv(results_file(session_id), predictions)
-    return model_result
+    return JSONResponse(content=model_result)
+
 
 @app.get("/get-result/{target_id}/")
 async def get_result(request: Request, target_id: int):
@@ -223,10 +238,8 @@ async def test_endpoint(request: Request):
     )
 
 
-
 @app.post("/test-endpoint/")
-async def test_endpoint(file: UploadFile | None, hyperparams: dict | None=None):
-
+async def test_endpoint(file: UploadFile | None, hyperparams: dict | None = None):
     if hyperparams is None:
         hyperparams = {
             "candidate_threshold": 0.2,
@@ -254,15 +267,15 @@ async def test_endpoint(file: UploadFile | None, hyperparams: dict | None=None):
 async def predict_endpoint(request: PredictionRequest):
     """
     AI Model Prediction Endpoint
-    
+
     Accepts JSON or CSV data and returns exoplanet classification predictions.
-    
+
     Args:
         request: PredictionRequest with format, data, and hyperparams
-        
+
     Returns:
         JSON response with predictions and summary statistics
-        
+
     Example:
         POST /api/predict/
         {
@@ -277,13 +290,13 @@ async def predict_endpoint(request: PredictionRequest):
     try:
         # Convert request data to DataFrame
         df = pd.DataFrame(request.data)
-        
+
         if df.empty:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No data provided in request"
             )
-        
+
         # Validate format
         format_name = request.format.lower()
         if format_name not in ["kepler", "k2", "tess"]:
@@ -291,7 +304,7 @@ async def predict_endpoint(request: PredictionRequest):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid format '{request.format}'. Must be one of: kepler, k2, tess"
             )
-        
+
         # Validate hyperparameters
         hyperparams = request.hyperparams.dict()
         if hyperparams["confirmed_threshold"] <= hyperparams["candidate_threshold"]:
@@ -299,19 +312,19 @@ async def predict_endpoint(request: PredictionRequest):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="confirmed_threshold must be greater than candidate_threshold"
             )
-        
+
         # Make predictions
         logger.info(
             f"Making predictions for {len(df)} records with format '{format_name}'"
         )
         result = await call_model(format_name, df, hyperparams)
-        
+
         logger.info(
             f"Predictions completed: {result.get('summary', {})}"
         )
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -324,10 +337,10 @@ async def predict_endpoint(request: PredictionRequest):
 
 @app.post("/api/predict/csv/")
 async def predict_csv_endpoint(
-    file: UploadFile,
-    format: str = "kepler",
-    candidate_threshold: float = 0.4,
-    confirmed_threshold: float = 0.7
+        file: UploadFile,
+        format: str = "kepler",
+        candidate_threshold: float = 0.4,
+        confirmed_threshold: float = 0.7
 ):
     """
     AI Model Prediction Endpoint for CSV files
