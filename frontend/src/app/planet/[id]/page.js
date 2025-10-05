@@ -7,11 +7,10 @@ import TransitLightCurve from '../../../components/TransitLightCurve';
 import { storage } from '../../../utils/storage';
 import FeatureImportance from "@/app/graphs/FeatureImportance";
 
-const planetImage = 'https://images.unsplash.com/photo-1614313913007-2b4ae8ce32ec?w=800';
-
 export default function PlanetDetail() {
     const [planet, setPlanet] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [texture, setTexture] = useState(null);
     const [curveConfig, setCurveConfig] = useState({
         baseline: 1,
         depth: 0.35,
@@ -59,6 +58,7 @@ export default function PlanetDetail() {
 
                     const detailedData = await response.json();
                     setPlanet(detailedData);
+                    setTexture(select_texture(detailedData['predicted_category']));
                     // Save for quick back/forward navigation
                     await storage.saveData('results', 'selectedPlanet', detailedData);
                     setLoading(false);
@@ -228,16 +228,53 @@ export default function PlanetDetail() {
         return String(value);
     };
 
-    // Get planet name from available fields
     const planetName = planet.pl_name || planet.kepoi_name || planet.kepler_name || planet.hostname || `Planet ${planet.id}`;
     const classLabel = getClassLabel(planet.predicted_class);
     const confidence = planet.predicted_confidence || 0;
 
-    // Fields to exclude from the details list
     const excludeFields = ['id', 'predicted_class', 'predicted_confidence', 'pl_name', 'kepoi_name', 'kepler_name'];
 
-    // Get all other fields dynamically
     const detailFields = Object.keys(planet).filter(key => !excludeFields.includes(key));
+
+    function select_texture(category)  {
+        const textures = {
+            "Gas Giant": [
+                "/textures/Gas Giant/Gaseous1.png",
+                "/textures/Gas Giant/Gaseous2.png",
+                "/textures/Gas Giant/Gaseous3.png",
+                "/textures/Gas Giant/Gaseous4.png",
+            ],
+            "Neptune-like": [
+                "/textures/Neptune-like/2k_uranus.png",
+                "/textures/Neptune-like/Giant.png",
+                "/textures/Neptune-like/Neptune.png",
+                "/textures/Neptune-like/Pink.png",
+            ],
+            "Super-Earth": [
+                "/textures/Super-Earth/Alpine.png",
+                "/textures/Super-Earth/Icy.png",
+                "/textures/Super-Earth/Savannah.png",
+                "/textures/Super-Earth/Swamp.png",
+                "/textures/Super-Earth/Tropical.png",
+                "/textures/Super-Earth/Volcanic.png",
+            ],
+            "Terrestrial": [
+                "/textures/Terrestrial/Martian.png",
+                "/textures/Terrestrial/Terrestrial1.png",
+                "/textures/Terrestrial/Terrestrial2.png",
+                "/textures/Terrestrial/Terrestrial3.png",
+                "/textures/Terrestrial/Terrestrial4.png",
+                "/textures/Terrestrial/Venusian.png",
+            ],
+        };
+        console.log("Category" + category);
+        const tList = textures[category];
+        if (!tList) return null;
+        const randomIndex = Math.floor(Math.random() * tList.length);
+        console.log(randomIndex);
+        console.log(tList[randomIndex]);
+        return tList[randomIndex];
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-black text-purple-100 p-8">
@@ -255,7 +292,7 @@ export default function PlanetDetail() {
                             planetData={{
                                 name: 'Earth',
                                 radius: 5,
-                                textureUrl: '/textures/earth.jpg',
+                                textureUrl: texture,
                                 hasAtmosphere: true,
                                 hasRings: false,
                                 moons: [
@@ -361,7 +398,7 @@ export default function PlanetDetail() {
                         </div>
                     </div>
 
-                    <div className="mt-6 flex justify-center">
+                    <div className="mt-8">
                         <FeatureImportance />
                     </div>
                 </div>
