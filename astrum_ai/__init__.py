@@ -11,7 +11,7 @@ from .common import (
 )
 from .training import TrainConfig, train_cli, train_models
 from .inference import inference_cli
-from .planet_matching import (
+from backend.planet_matching import (
     FeatureRange,
     CategoryMatch,
     PlanetCategoryClassifier,

@@ -34,7 +34,7 @@ except ImportError as exc:  # pragma: no cover - handled at runtime
 
 from astrum_ai.common import FEATURE_COLUMNS, MISSION_SPECS
 from astrum_ai.inference import load_inference_frame
-from astrum_ai.planet_matching import PlanetCategoryClassifier
+from backend.planet_matching import PlanetCategoryClassifier
 
 
 def parse_args() -> argparse.Namespace:

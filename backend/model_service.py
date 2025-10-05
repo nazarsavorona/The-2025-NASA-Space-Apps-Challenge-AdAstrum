@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from joblib import load
 
-from astrum_ai import PlanetCategoryClassifier
+from planet_matching import PlanetCategoryClassifier
 
 
 def compute_confidence(probability: float, candidate_threshold: float, confirmed_threshold: float) -> float:
@@ -303,9 +303,7 @@ class ModelService:
             compute_confidence(p, candidate_threshold, confirmed_threshold)
             for p in probabilities
         ]
-        planet_categories = [
-            self._assign_planet_category(df)
-        ]
+        planet_categories = self._assign_planet_category(features_df)
 
         # Create output dataframe
         result_df = df.copy()

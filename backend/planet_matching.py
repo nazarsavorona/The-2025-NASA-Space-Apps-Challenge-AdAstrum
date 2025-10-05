@@ -40,7 +40,23 @@ from typing import Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 
-from .common import FEATURE_COLUMNS
+FEATURE_COLUMNS = [
+    "orbital_period",
+    "transit_duration",
+    "transit_depth",
+    "impact_parameter",
+    "eccentricity",
+    "inclination",
+    "planet_radius",
+    "planet_equilibrium_temp",
+    "insolation_flux",
+    "stellar_temp",
+    "stellar_logg",
+    "stellar_radius",
+    "stellar_mass",
+    "stellar_metallicity",
+]
+
 
 __all__ = [
     "FeatureRange",
