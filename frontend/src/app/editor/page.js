@@ -92,7 +92,7 @@ export default function Editor() {
     };
 
     const handleSubmit = async () => {
-        setLoading(true);
+        setShowModal(true);
         try {
             await storage.saveData('processedData', 'data', data);
             await storage.saveData('processedData', 'columns', columns);
@@ -153,7 +153,33 @@ export default function Editor() {
                         <p className="text-violet-400 text-xs tracking-wide">
                             File: {fileName} | Total rows: {totalRows} | Total columns: {columns.length}
                         </p>
+
+                        <div className="mt-6 flex justify-between items-center text-sm text-violet-300">
+                            <span>
+                                Showing {startIndex + 1}-{Math.min(endIndex, totalRows)} of {totalRows}
+                            </span>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                                    disabled={currentPage === 1}
+                                    className="px-4 py-1 rounded border border-violet-600 text-violet-300 hover:bg-violet-600/20 disabled:opacity-40"
+                                >
+                                    ← Prev
+                                </button>
+                                <span className="px-3 py-1 bg-violet-950/50 rounded">
+                                    Page {currentPage} / {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                                    disabled={currentPage === totalPages}
+                                    className="px-4 py-1 rounded border border-violet-600 text-violet-300 hover:bg-violet-600/20 disabled:opacity-40"
+                                >
+                                    Next →
+                                </button>
+                            </div>
+                        </div>
                     </div>
+
 
                     <button
                         onClick={handleSubmit}
@@ -161,9 +187,13 @@ export default function Editor() {
                     >
                         Continue
                     </button>
+
+
+
                 </div>
 
                 <div className="from-gray-900/60 to-gray-950/60 border border-violet-800/40 shadow-2xl">
+
 
                     <div className="overflow-x-auto">
                         <table className="w-full border-collapse">
@@ -232,30 +262,6 @@ export default function Editor() {
                         </table>
                     </div>
 
-                    <div className="mt-6 flex justify-between items-center text-sm text-violet-300">
-                        <span>
-                            Showing {startIndex + 1}-{Math.min(endIndex, totalRows)} of {totalRows}
-                        </span>
-                        <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                                disabled={currentPage === 1}
-                                className="px-4 py-1 rounded border border-violet-600 text-violet-300 hover:bg-violet-600/20 disabled:opacity-40"
-                            >
-                                ← Prev
-                            </button>
-                            <span className="px-3 py-1 bg-violet-950/50 rounded">
-                                Page {currentPage} / {totalPages}
-                            </span>
-                            <button
-                                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                                disabled={currentPage === totalPages}
-                                className="px-4 py-1 rounded border border-violet-600 text-violet-300 hover:bg-violet-600/20 disabled:opacity-40"
-                            >
-                                Next →
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
 
