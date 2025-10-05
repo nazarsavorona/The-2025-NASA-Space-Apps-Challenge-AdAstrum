@@ -55,36 +55,38 @@ export default function TransitCurveControls({
             </label>
 
             <label className="flex flex-col gap-2 text-sm">
-                <span className="text-gray-300 uppercase tracking-widest text-xs">Transit depth</span>
+                <span className="text-gray-300 uppercase tracking-widest text-xs">
+                    Transit depth · {(config.depth * 1_000_000).toFixed(0)} ppm
+                </span>
                 <div className="flex items-center gap-3">
                     <input
                         type="range"
-                        min="0.05"
-                        max="0.75"
-                        step="0.01"
+                        min="0.0001"
+                        max="0.08"
+                        step="0.0001"
                         value={config.depth}
-                        onChange={handleValue('depth', { min: 0.05, max: 0.75 })}
+                        onChange={handleValue('depth', { min: 0.0001, max: 0.08 })}
                         className="w-full accent-blue-400"
                     />
                     <input
                         type="number"
-                        min="0.05"
-                        max="0.75"
-                        step="0.01"
+                        min="0.0001"
+                        max="0.08"
+                        step="0.0001"
                         value={config.depth}
-                        onChange={handleValue('depth', { min: 0.05, max: 0.75 })}
-                        className="w-20 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-right"
+                        onChange={handleValue('depth', { min: 0.0001, max: 0.08 })}
+                        className="w-24 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-right"
                     />
                 </div>
             </label>
 
             <label className="flex flex-col gap-2 text-sm">
-                <span className="text-gray-300 uppercase tracking-widest text-xs">Ingress / egress</span>
+                <span className="text-gray-300 uppercase tracking-widest text-xs">Ingress / egress (hrs)</span>
                 <div className="flex items-center gap-3">
                     <input
                         type="range"
-                        min="0.04"
-                        max="0.4"
+                        min="0.02"
+                        max="3"
                         step="0.01"
                         value={config.ingressDuration}
                         onChange={handleIngress}
@@ -92,8 +94,8 @@ export default function TransitCurveControls({
                     />
                     <input
                         type="number"
-                        min="0.04"
-                        max="0.4"
+                        min="0.02"
+                        max="3"
                         step="0.01"
                         value={config.ingressDuration}
                         onChange={handleIngress}
@@ -103,46 +105,46 @@ export default function TransitCurveControls({
             </label>
 
             <label className="flex flex-col gap-2 text-sm">
-                <span className="text-gray-300 uppercase tracking-widest text-xs">Flat minimum</span>
+                <span className="text-gray-300 uppercase tracking-widest text-xs">Flat minimum (hrs)</span>
                 <div className="flex items-center gap-3">
                     <input
                         type="range"
-                        min="0.08"
-                        max="0.6"
+                        min="0.05"
+                        max="8"
                         step="0.01"
                         value={config.flatDuration}
-                        onChange={handleValue('flatDuration', { min: 0.08, max: 0.6 })}
+                        onChange={handleValue('flatDuration', { min: 0.05, max: 8 })}
                         className="w-full accent-blue-400"
                     />
                     <input
                         type="number"
-                        min="0.08"
-                        max="0.6"
+                        min="0.05"
+                        max="8"
                         step="0.01"
                         value={config.flatDuration}
-                        onChange={handleValue('flatDuration', { min: 0.08, max: 0.6 })}
+                        onChange={handleValue('flatDuration', { min: 0.05, max: 8 })}
                         className="w-20 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-right"
                     />
                 </div>
             </label>
 
             <label className="flex flex-col gap-2 text-sm lg:col-span-2">
-                <span className="text-gray-300 uppercase tracking-widest text-xs">Out-of-transit duration</span>
+                <span className="text-gray-300 uppercase tracking-widest text-xs">Out-of-transit duration (hrs)</span>
                 <div className="flex items-center gap-3">
                     <input
                         type="range"
-                        min="0.1"
-                        max="1.2"
-                        step="0.01"
+                        min="0.2"
+                        max="12"
+                        step="0.05"
                         value={config.preTransitDuration}
                         onChange={handleEnvelope}
                         className="w-full accent-blue-400"
                     />
                     <input
                         type="number"
-                        min="0.1"
-                        max="1.2"
-                        step="0.01"
+                        min="0.2"
+                        max="12"
+                        step="0.05"
                         value={config.preTransitDuration}
                         onChange={handleEnvelope}
                         className="w-20 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-right"
