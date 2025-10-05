@@ -32,6 +32,9 @@ def classify_hz(row, buffer_frac=0.2):
     S = row["insolation_flux"]
     teff = row["stellar_temp"]
 
+    if row["planet_radius"] > 2.0:
+        return "Non-Habitable"
+
     S_in, S_out = compute_hz_boundaries(teff)
 
     S_in_opt = S_in * 0.9
@@ -42,13 +45,13 @@ def classify_hz(row, buffer_frac=0.2):
         inner_core = S_in + buffer_frac * width
         outer_core = S_out - buffer_frac * width
         if (S >= inner_core) and (S <= outer_core):
-            return "Conservative"
+            return "Habitable"
         else:
-            return "Edge"
+            return "Edge of Habitable Zone"
     elif (S >= S_in_opt) and (S <= S_out_opt):
-        return "Optimistic"
+        return "Optimistic Habitable Zone"
     else:
-        return "outside"
+        return "Non-Habitable"
 
 def is_habitable_zone(df: pd.DataFrame):
     df = df.copy()
