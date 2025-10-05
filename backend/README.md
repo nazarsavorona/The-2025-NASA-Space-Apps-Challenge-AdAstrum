@@ -22,15 +22,6 @@ python -m astrum_ai.training
 This will create the following artifacts:
 - `models/shared_model.joblib`
 - `models/shared_preprocessors.joblib`
-### Compute Feature Importances
-
-Generate a JSON report of the model's feature importances from the project root:
-
-```bash
-python feature_importance.py --model-dir assets/models
-```
-
-The script writes `feature_importances.json` alongside the model artifacts by default. Use `--output` to choose a different location or `--importance-type split` to switch from gain-based importances.
 
 ### Compute Feature Importances
 
