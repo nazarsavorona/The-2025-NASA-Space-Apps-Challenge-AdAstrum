@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from joblib import load
 
+from planet_matching import PlanetCategoryClassifier
+
 
 def compute_confidence(probability: float, candidate_threshold: float, confirmed_threshold: float) -> float:
     """Map a raw model probability to a confidence score (0-1) based on thresholds."""
@@ -301,17 +303,23 @@ class ModelService:
             compute_confidence(p, candidate_threshold, confirmed_threshold)
             for p in probabilities
         ]
+        planet_categories = self._assign_planet_category(features_df)
 
         # Create output dataframe
         result_df = df.copy()
         result_df["predicted_class"] = classes
         result_df["predicted_confidence"] = confidences
+        result_df["predicted_categories"] = planet_categories
         result_df["id"] = range(1, len(classes) + 1)
         result_df = result_df.replace([np.nan, np.inf, -np.inf], None)
 
         cols = ["id"] + [col for col in result_df.columns if col != "id"]
         result_df = result_df[cols]
         return result_df
+
+    def _assign_planet_category(self, df: pd.DataFrame):
+        planet_classifier = PlanetCategoryClassifier()
+        return planet_classifier.predict(df)['predicted_category']
 
 
 # Global model service instance

@@ -191,7 +191,7 @@ def set_hyperparams(session_id: str, hyperparams: Dict):
 
 def _filter_result_columns(df: pd.DataFrame):
     result_df = pd.DataFrame()
-    for col in ["id", "predicted_class", "predicted_confidence"]:
+    for col in ["id", "predicted_class", "predicted_confidence", "predicted_categories"]:
         if col in df.columns:
             result_df[col] = df[col].values
 
