@@ -197,6 +197,8 @@ class PlanetCategoryClassifier:
     fractional distance outside its allowed interval. Lower scores indicate
     closer agreement with the category signature. The ``predict`` method works
     on DataFrames and appends the predicted category plus score for every row.
+    This classifier now always assigns the best category (no unclassified rows),
+    while still returning the score for reference.
     """
 
     def __init__(self, signatures: Optional[Sequence[CategorySignature]] = None) -> None:
@@ -222,10 +224,14 @@ class PlanetCategoryClassifier:
         *,
         max_total_score: float = 6.0,
     ) -> Optional[CategoryMatch]:
-        for match in self.rank(features):
-            if match.total_score <= max_total_score:
-                return match
-        return None
+        """Return the best category match for a single feature mapping.
+
+        Note: This implementation always returns the top-ranked category,
+        regardless of ``max_total_score``. The parameter is retained for
+        backward compatibility but is not used to filter results.
+        """
+        ranked = self.rank(features)
+        return ranked[0] if ranked else None
 
     def predict(
         self,
@@ -239,9 +245,13 @@ class PlanetCategoryClassifier:
         if missing:
             raise ValueError(f"Missing required feature columns: {missing}")
 
+        # Apply light preprocessing/normalization to handle unit mismatches
+        # commonly found in mission catalogs (e.g., Kepler transit depth in ppm).
+        norm = self.normalize_frame(frame)
+
         predictions = []
         scores = []
-        for _, row in frame.iterrows():
+        for _, row in norm.iterrows():
             match = self.predict_row(row, max_total_score=max_total_score)
             if match is None:
                 predictions.append(None)
@@ -250,10 +260,46 @@ class PlanetCategoryClassifier:
                 predictions.append(match.name)
                 scores.append(match.total_score)
 
-        result = frame.copy()
+        result = norm.copy()
         result[category_column] = predictions
         result[score_column] = scores
         return result
 
     def explain(self, features: Mapping[str, float]) -> Dict[str, CategoryMatch]:
         return {match.name: match for match in self.rank(features)}
+
+    def normalize_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """Return a shallow-normalized copy of feature columns in ``frame``.
+
+        - transit_depth: auto-detect likely units from distribution and convert
+          ppm→fraction (/1e6) or percent→fraction (/100). If already fractional,
+          leave unchanged. Negative values are clipped to 0.
+        - Basic physical clipping for a subset of features to avoid pathological
+          scores: non-negativity for several scale variables; hard caps for
+          eccentricity and impact parameter.
+        """
+        df = frame.copy()
+
+        # Transit depth unit normalization
+        if "transit_depth" in df.columns:
+            depth = pd.to_numeric(df["transit_depth"], errors="coerce")
+            q95 = depth.quantile(0.95)
+            if pd.notna(q95):
+                if q95 > 10:  # likely ppm
+                    depth = depth / 1_000_000.0
+                elif q95 > 1:  # likely percent
+                    depth = depth / 100.0
+            df["transit_depth"] = depth.clip(lower=0.0)
+
+        # Non-negative clipping on a few obviously positive features
+        for col in ("orbital_period", "transit_duration", "insolation_flux", "planet_radius"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").clip(lower=0.0)
+
+        if "impact_parameter" in df.columns:
+            df["impact_parameter"] = pd.to_numeric(df["impact_parameter"], errors="coerce").clip(lower=0.0, upper=1.5)
+
+        if "eccentricity" in df.columns:
+            df["eccentricity"] = pd.to_numeric(df["eccentricity"], errors="coerce").clip(lower=0.0, upper=0.99)
+
+        return df
