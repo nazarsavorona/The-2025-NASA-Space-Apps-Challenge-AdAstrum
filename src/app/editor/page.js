@@ -14,7 +14,6 @@ export default function Editor() {
     const rowsPerPage = 50;
     const router = useRouter();
 
-
     useEffect(() => {
         loadCSVData();
     }, []);

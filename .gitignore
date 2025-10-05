@@ -62,13 +62,21 @@ node_modules/
 
 # production
 /build
+<<<<<<< HEAD
 dist/
+=======
+
+# misc
+.DS_Store
+*.pem
+>>>>>>> b7e2384 (start)
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+<<<<<<< HEAD
 *.log
 
 # ============================================
@@ -100,5 +108,15 @@ stable-dreamfusion/
 .vercel
 
 # TypeScript
+=======
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+>>>>>>> b7e2384 (start)
 *.tsbuildinfo
 next-env.d.ts

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # NASA Space Apps Challenge – AdAstrum
 
 A full-stack application for exoplanet classification, combining machine learning models with an interactive Next.js frontend.
@@ -68,6 +69,11 @@ docker-compose up
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
 ### Getting Started
+=======
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+
+## Getting Started
+>>>>>>> b7e2384 (start)
 
 First, run the development server:
 
@@ -87,7 +93,11 @@ You can start editing the page by modifying `app/page.js`. The page auto-updates
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+<<<<<<< HEAD
 ### Learn More
+=======
+## Learn More
+>>>>>>> b7e2384 (start)
 
 To learn more about Next.js, take a look at the following resources:
 
@@ -96,11 +106,16 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+<<<<<<< HEAD
 ### Deploy on Vercel
+=======
+## Deploy on Vercel
+>>>>>>> b7e2384 (start)
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+<<<<<<< HEAD
 
 ---
 
@@ -111,3 +126,5 @@ This project was developed for the 2025 NASA Space Apps Challenge.
 ## License
 
 See [LICENSE](LICENSE) for details.
+=======
+>>>>>>> b7e2384 (start)
