@@ -10,6 +10,20 @@ Full‑stack application for exoplanet classification that combines production�
 
 ---
 
+## Project Details
+
+Our project is a web-based AI platform for automated detection and classification of exoplanets. It analyzes stellar light curve data from NASA missions (Kepler, K2, TESS), applying the transit method to identify subtle brightness variations that may indicate orbiting planets.
+
+- Intelligence: a LightGBM model predicts the likelihood that a candidate is a real exoplanet, estimates habitability potential, and classifies planetary type.
+- Data workflow: users can upload `.csv` datasets, validate and edit data in real time, and visualize results via interactive charts and 3D planetary models.
+- Architecture: a Python (FastAPI) backend handles data processing, training, and inference; a Next.js frontend provides a responsive, intuitive interface; Docker ensures consistent deployment.
+- Performance: state-of-the-art accuracy with ROC–AUC ≈ 97.2%, while remaining lightweight enough to run efficiently on a standard laptop.
+- Impact: combines high-precision analytics with an accessible, visually engaging, and educational interface to democratize exoplanet research for both professionals and enthusiasts.
+
+The intended impact is to empower anyone to contribute to the discovery of potentially habitable worlds beyond our solar system.
+
+---
+
 ## Backend (AI Models & API)
 
 ### Prerequisites
