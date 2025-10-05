@@ -79,5 +79,4 @@ def save_as_csv(file: str, df : pd.DataFrame):
     df.to_csv(path, index=False)
 
 def read_csv_to_df(file: str):
-    df = pd.read_csv(file)
-    return df
+    return pd.read_csv(Path(file))

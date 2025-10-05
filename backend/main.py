@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import Dict
 
 import aiofiles
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, FastAPI, UploadFile, HTTPException, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -246,7 +247,10 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
 @app.get("/get-result/{target_id}/")
 async def get_result(request: Request, target_id: int):
     session_id = request.state.session_id
+    print(f"get-result session id {session_id}")
     df = read_csv_to_df(results_file(session_id))
+    df = df.replace([np.inf, -np.inf], np.nan).where(pd.notnull(df), None)
+    print("Reach")
     if "id" not in df.columns:
         raise HTTPException(status_code=400, detail="Results file missing 'id' column")
     record = df[df["id"] == target_id]
