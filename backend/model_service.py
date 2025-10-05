@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from joblib import load
 
-from backend.habitant import is_habitable_zone
+from habitant import is_habitable_zone
 from planet_matching import PlanetCategoryClassifier
 
 
