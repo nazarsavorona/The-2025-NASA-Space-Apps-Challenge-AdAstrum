@@ -68,19 +68,98 @@ const planetDetails = {
     }
 };
 
+const planetTransitMetrics = {
+    'Kepler-1 b': {
+        depthPpm: 14230.9,
+        durationHours: 1.74319,
+        snr: 4304.3,
+        orbitalPeriodDays: 2.470613377,
+        epochBkjd: 122.763305
+    },
+    'Kepler-452b': {
+        depthPpm: 450,
+        durationHours: 8.5,
+        snr: 95,
+        orbitalPeriodDays: 385,
+        epochBkjd: 711.2
+    },
+    'Proxima Centauri b': {
+        depthPpm: 1300,
+        durationHours: 2.4,
+        snr: 250,
+        orbitalPeriodDays: 11.186,
+        epochBkjd: 135.4
+    },
+    'TRAPPIST-1e': {
+        depthPpm: 5400,
+        durationHours: 1.1,
+        snr: 810,
+        orbitalPeriodDays: 6.099,
+        epochBkjd: 131.4
+    },
+    'HD 209458 b': {
+        depthPpm: 15200,
+        durationHours: 3.1,
+        snr: 6000,
+        orbitalPeriodDays: 3.52474859,
+        epochBkjd: 140.6
+    },
+    'Gliese 667Cc': {
+        depthPpm: 900,
+        durationHours: 4.8,
+        snr: 120,
+        orbitalPeriodDays: 28.155,
+        epochBkjd: 310.8
+    },
+    'K2-18b': {
+        depthPpm: 2500,
+        durationHours: 2.6,
+        snr: 430,
+        orbitalPeriodDays: 33,
+        epochBkjd: 200.1
+    }
+};
+
 export default function PlanetDetail({ params }) {
     const [planet, setPlanet] = useState(null);
     const [curveConfig, setCurveConfig] = useState({
         baseline: 1,
-        depth: 0.35,
-        preTransitDuration: 0.35,
-        ingressDuration: 0.12,
-        flatDuration: 0.18,
-        egressDuration: 0.12,
-        postTransitDuration: 0.35,
+        depth: 0.012,
+        preTransitDuration: 0.8,
+        ingressDuration: 0.35,
+        flatDuration: 1.1,
+        egressDuration: 0.35,
+        postTransitDuration: 0.8,
         slope: 2.2
     });
+    const [observation, setObservation] = useState({
+        depthPpm: Number((0.012 * 1_000_000).toFixed(0)),
+        durationHours: Number((0.35 + 1.1 + 0.35).toFixed(2)),
+        snr: 400,
+        orbitalPeriodDays: 10,
+        epochBkjd: 120
+    });
     const router = useRouter();
+
+    const applyDurationTemplate = (durationHours) => {
+        if (!Number.isFinite(durationHours) || durationHours <= 0) {
+            return;
+        }
+        const ingress = Math.max(0.02, Math.min(durationHours / 2 - 0.05, durationHours * 0.18));
+        const roundedIngress = Number(ingress.toFixed(2));
+        const flat = Math.max(0.02, durationHours - roundedIngress * 2);
+        const roundedFlat = Number(flat.toFixed(2));
+        const baselineWindow = Number(Math.max(durationHours * 0.6, 0.5).toFixed(2));
+
+        setCurveConfig((prev) => ({
+            ...prev,
+            ingressDuration: roundedIngress,
+            egressDuration: roundedIngress,
+            flatDuration: roundedFlat,
+            preTransitDuration: baselineWindow,
+            postTransitDuration: baselineWindow
+        }));
+    };
 
     useEffect(() => {
         const storedPlanet = sessionStorage.getItem('selectedPlanet');
@@ -96,22 +175,54 @@ export default function PlanetDetail({ params }) {
             return;
         }
 
-        const probabilityRaw = typeof planet.probability === 'number'
-            ? planet.probability
-            : parseFloat(planet.probability);
-        const boundedProbability = Number.isFinite(probabilityRaw)
-            ? Math.min(Math.max(probabilityRaw, 0), 1)
-            : 0.7;
-        const derivedDepthRaw = 0.15 + (1 - boundedProbability) * 0.45;
-        const derivedDepth = Number(Math.min(0.75, Math.max(0.05, derivedDepthRaw)).toFixed(2));
+        const metrics = planetTransitMetrics[planet.name] || {
+            depthPpm: 9000,
+            durationHours: 2.4,
+            snr: 350,
+            orbitalPeriodDays: 12,
+            epochBkjd: 120
+        };
 
-        setCurveConfig((prev) => {
-            if (Math.abs(prev.depth - derivedDepth) < 0.01) {
-                return prev;
-            }
-            return { ...prev, depth: derivedDepth };
+        setObservation({
+            depthPpm: Number(metrics.depthPpm.toFixed(1)),
+            durationHours: Number(metrics.durationHours.toFixed(2)),
+            snr: metrics.snr,
+            orbitalPeriodDays: metrics.orbitalPeriodDays,
+            epochBkjd: metrics.epochBkjd
         });
+
+        setCurveConfig((prev) => ({
+            ...prev,
+            depth: metrics.depthPpm / 1_000_000,
+            ingressDuration: Number(Math.max(0.02, Math.min(metrics.durationHours * 0.2, metrics.durationHours / 2 - 0.05)).toFixed(2)),
+            egressDuration: Number(Math.max(0.02, Math.min(metrics.durationHours * 0.2, metrics.durationHours / 2 - 0.05)).toFixed(2)),
+            flatDuration: Number(Math.max(0.02, metrics.durationHours - Math.max(0.02, Math.min(metrics.durationHours * 0.2, metrics.durationHours / 2 - 0.05)) * 2).toFixed(2)),
+            preTransitDuration: Number(Math.max(metrics.durationHours * 0.6, 0.5).toFixed(2)),
+            postTransitDuration: Number(Math.max(metrics.durationHours * 0.6, 0.5).toFixed(2))
+        }));
     }, [planet]);
+
+    useEffect(() => {
+        const derivedDepth = Number((curveConfig.depth * 1_000_000).toFixed(1));
+        if (Number.isFinite(derivedDepth) && Math.abs((observation?.depthPpm ?? 0) - derivedDepth) > 0.5) {
+            setObservation((prev) => ({
+                ...prev,
+                depthPpm: derivedDepth
+            }));
+        }
+    }, [curveConfig.depth]);
+
+    useEffect(() => {
+        const transitDuration = Number(
+            (curveConfig.ingressDuration + curveConfig.flatDuration + curveConfig.egressDuration).toFixed(2)
+        );
+        if (Number.isFinite(transitDuration) && Math.abs((observation?.durationHours ?? 0) - transitDuration) > 0.01) {
+            setObservation((prev) => ({
+                ...prev,
+                durationHours: transitDuration
+            }));
+        }
+    }, [curveConfig.ingressDuration, curveConfig.flatDuration, curveConfig.egressDuration]);
 
     const updateValue = (key, value, boundaries = {}) => {
         if (!Number.isFinite(value)) {
@@ -120,13 +231,16 @@ export default function PlanetDetail({ params }) {
         const { min = 0, max } = boundaries;
         const clamped = Math.max(min, max !== undefined ? Math.min(value, max) : value);
         setCurveConfig((prev) => ({ ...prev, [key]: clamped }));
+        if (key === 'depth') {
+            setObservation((prev) => ({ ...prev, depthPpm: Number((clamped * 1_000_000).toFixed(1)) }));
+        }
     };
 
     const updateSymmetricEnvelope = (value) => {
         if (!Number.isFinite(value)) {
             return;
         }
-        const clamped = Math.max(0.05, Math.min(value, 2));
+        const clamped = Math.max(0.2, Math.min(value, 12));
         setCurveConfig((prev) => ({
             ...prev,
             preTransitDuration: clamped,
@@ -138,8 +252,44 @@ export default function PlanetDetail({ params }) {
         if (!Number.isFinite(value)) {
             return;
         }
-        const clamped = Math.max(0.04, Math.min(value, 0.6));
+        const clamped = Math.max(0.02, Math.min(value, 3));
         setCurveConfig((prev) => ({ ...prev, ingressDuration: clamped, egressDuration: clamped }));
+    };
+
+    const handleObservationChange = (key, rawValue) => {
+        if (!Number.isFinite(rawValue)) {
+            return;
+        }
+
+        if (key === 'depthPpm') {
+            const clampedDepth = Math.max(1, rawValue);
+            setObservation((prev) => ({ ...prev, depthPpm: Number(clampedDepth.toFixed(1)) }));
+            setCurveConfig((prev) => ({ ...prev, depth: Number((clampedDepth / 1_000_000).toFixed(6)) }));
+            return;
+        }
+
+        if (key === 'durationHours') {
+            const clampedDuration = Math.max(0.2, rawValue);
+            setObservation((prev) => ({ ...prev, durationHours: Number(clampedDuration.toFixed(2)) }));
+            applyDurationTemplate(clampedDuration);
+            return;
+        }
+
+        if (key === 'snr') {
+            const clampedSnr = Math.max(1, rawValue);
+            setObservation((prev) => ({ ...prev, snr: Number(clampedSnr.toFixed(1)) }));
+            return;
+        }
+
+        if (key === 'orbitalPeriodDays') {
+            const clampedPeriod = Math.max(0.1, rawValue);
+            setObservation((prev) => ({ ...prev, orbitalPeriodDays: Number(clampedPeriod.toFixed(4)) }));
+            return;
+        }
+
+        if (key === 'epochBkjd') {
+            setObservation((prev) => ({ ...prev, epochBkjd: Number(rawValue.toFixed(4)) }));
+        }
     };
 
     if (!planet) {
@@ -243,9 +393,72 @@ export default function PlanetDetail({ params }) {
                         />
                     </div>
 
+                    <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">Transit depth (ppm)</span>
+                            <input
+                                type="number"
+                                min="1"
+                                value={observation.depthPpm}
+                                onChange={(event) => handleObservationChange('depthPpm', parseFloat(event.target.value))}
+                                className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">Transit duration (hrs)</span>
+                            <input
+                                type="number"
+                                min="0.2"
+                                step="0.05"
+                                value={observation.durationHours}
+                                onChange={(event) => handleObservationChange('durationHours', parseFloat(event.target.value))}
+                                className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">SNR</span>
+                            <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={observation.snr}
+                                onChange={(event) => handleObservationChange('snr', parseFloat(event.target.value))}
+                                className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">Orbital period (days)</span>
+                            <input
+                                type="number"
+                                min="0.1"
+                                step="0.01"
+                                value={observation.orbitalPeriodDays}
+                                onChange={(event) => handleObservationChange('orbitalPeriodDays', parseFloat(event.target.value))}
+                                className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">Transit epoch (BKJD)</span>
+                            <input
+                                type="number"
+                                step="0.0001"
+                                value={observation.epochBkjd}
+                                onChange={(event) => handleObservationChange('epochBkjd', parseFloat(event.target.value))}
+                                className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2"
+                            />
+                        </label>
+                    </div>
+
+                    <div className="mt-4 text-xs text-gray-500">
+                        <span>Transit span (ingress + flat + egress): {(curveConfig.ingressDuration + curveConfig.flatDuration + curveConfig.egressDuration).toFixed(2)} hrs · </span>
+                        <span>Observation window: {(curveConfig.preTransitDuration + curveConfig.ingressDuration + curveConfig.flatDuration + curveConfig.egressDuration + curveConfig.postTransitDuration).toFixed(2)} hrs</span>
+                    </div>
+
                     <div className="mt-8">
                         <TransitLightCurve
                             className="bg-gradient-to-br from-gray-950 to-gray-900"
+                            width={640}
+                            height={320}
                             baseline={curveConfig.baseline}
                             depth={curveConfig.depth}
                             preTransitDuration={curveConfig.preTransitDuration}
@@ -254,9 +467,19 @@ export default function PlanetDetail({ params }) {
                             egressDuration={curveConfig.egressDuration}
                             postTransitDuration={curveConfig.postTransitDuration}
                             slope={curveConfig.slope}
+                            tickCount={6}
+                            fluxTickCount={5}
+                            fluxScale={1_000_000}
+                            fluxUnit="ppm relative drop"
+                            timeUnit="hours"
+                            showNoise
+                            snr={observation.snr}
+                            timeAxisLabel="Time (hours relative to mid-transit)"
+                            fluxAxisLabel="Flux (ppm relative drop)"
                         />
                     </div>
                 </div>
+
             </div>
         </div>
     );

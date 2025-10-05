@@ -1,30 +1,63 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import TransitLightCurve from '../../components/TransitLightCurve';
 import TransitCurveControls from '../../components/TransitCurveControls';
 
 const createDefaultCurve = () => ({
     baseline: 1,
-    depth: 0.35,
-    preTransitDuration: 0.35,
-    ingressDuration: 0.12,
-    flatDuration: 0.18,
-    egressDuration: 0.12,
-    postTransitDuration: 0.35,
+    depth: 0.012,
+    preTransitDuration: 0.8,
+    ingressDuration: 0.35,
+    flatDuration: 1.1,
+    egressDuration: 0.35,
+    postTransitDuration: 0.8,
     slope: 2.2
 });
 
 const createDefaultView = () => ({
     width: 640,
-    height: 280,
-    tickCount: 4,
+    height: 320,
+    tickCount: 6,
     strokeColor: '#f6a23a',
     backgroundColor: '#040307'
+});
+
+const createDefaultObservation = () => ({
+    depthPpm: 12000,
+    durationHours: 1.8,
+    snr: 800,
+    orbitalPeriodDays: 4.3,
+    epochBkjd: 120.45
 });
 
 export default function LightCurveDemo() {
     const [curveConfig, setCurveConfig] = useState(() => createDefaultCurve());
     const [viewConfig, setViewConfig] = useState(() => createDefaultView());
+    const [observation, setObservation] = useState(() => createDefaultObservation());
+
+    const applyDurationTemplate = (durationHours) => {
+        if (!Number.isFinite(durationHours) || durationHours <= 0) {
+            return;
+        }
+        const ingress = Math.max(0.02, Math.min(durationHours * 0.18, durationHours / 2 - 0.05));
+        const roundedIngress = Number(ingress.toFixed(2));
+        const flat = Math.max(0.02, durationHours - roundedIngress * 2);
+        const roundedFlat = Number(flat.toFixed(2));
+        const baselineWindow = Number(Math.max(durationHours * 0.6, 0.5).toFixed(2));
+
+        setCurveConfig((prev) => ({
+            ...prev,
+            ingressDuration: roundedIngress,
+            egressDuration: roundedIngress,
+            flatDuration: roundedFlat,
+            preTransitDuration: baselineWindow,
+            postTransitDuration: baselineWindow
+        }));
+    };
+
+    useEffect(() => {
+        applyDurationTemplate(createDefaultObservation().durationHours);
+    }, []);
 
     const updateCurveValue = (key, value, boundaries = {}) => {
         if (!Number.isFinite(value)) {
@@ -33,13 +66,16 @@ export default function LightCurveDemo() {
         const { min = 0, max } = boundaries;
         const clamped = Math.max(min, max !== undefined ? Math.min(value, max) : value);
         setCurveConfig((prev) => ({ ...prev, [key]: clamped }));
+        if (key === 'depth') {
+            setObservation((prev) => ({ ...prev, depthPpm: Number((clamped * 1_000_000).toFixed(1)) }));
+        }
     };
 
     const updateEnvelope = (value) => {
         if (!Number.isFinite(value)) {
             return;
         }
-        const clamped = Math.max(0.05, Math.min(value, 2));
+        const clamped = Math.max(0.2, Math.min(value, 12));
         setCurveConfig((prev) => ({
             ...prev,
             preTransitDuration: clamped,
@@ -51,7 +87,7 @@ export default function LightCurveDemo() {
         if (!Number.isFinite(value)) {
             return;
         }
-        const clamped = Math.max(0.04, Math.min(value, 0.6));
+        const clamped = Math.max(0.02, Math.min(value, 3));
         setCurveConfig((prev) => ({ ...prev, ingressDuration: clamped, egressDuration: clamped }));
     };
 
@@ -73,9 +109,64 @@ export default function LightCurveDemo() {
     };
 
     const handleReset = () => {
-        setCurveConfig(createDefaultCurve());
+        const defaults = createDefaultCurve();
+        setCurveConfig(defaults);
         setViewConfig(createDefaultView());
+        setObservation(createDefaultObservation());
+        applyDurationTemplate(createDefaultObservation().durationHours);
     };
+
+    const handleObservationChange = (key, rawValue) => {
+        if (!Number.isFinite(rawValue)) {
+            return;
+        }
+
+        if (key === 'depthPpm') {
+            const depth = Math.max(1, rawValue);
+            setObservation((prev) => ({ ...prev, depthPpm: Number(depth.toFixed(1)) }));
+            setCurveConfig((prev) => ({ ...prev, depth: Number((depth / 1_000_000).toFixed(6)) }));
+            return;
+        }
+
+        if (key === 'durationHours') {
+            const duration = Math.max(0.2, rawValue);
+            setObservation((prev) => ({ ...prev, durationHours: Number(duration.toFixed(2)) }));
+            applyDurationTemplate(duration);
+            return;
+        }
+
+        if (key === 'snr') {
+            const snrValue = Math.max(1, rawValue);
+            setObservation((prev) => ({ ...prev, snr: Number(snrValue.toFixed(1)) }));
+            return;
+        }
+
+        if (key === 'orbitalPeriodDays') {
+            const period = Math.max(0.1, rawValue);
+            setObservation((prev) => ({ ...prev, orbitalPeriodDays: Number(period.toFixed(4)) }));
+            return;
+        }
+
+        if (key === 'epochBkjd') {
+            setObservation((prev) => ({ ...prev, epochBkjd: Number(rawValue.toFixed(4)) }));
+        }
+    };
+
+    useEffect(() => {
+        const depthPpm = Number((curveConfig.depth * 1_000_000).toFixed(1));
+        if (Number.isFinite(depthPpm) && Math.abs(depthPpm - observation.depthPpm) > 0.5) {
+            setObservation((prev) => ({ ...prev, depthPpm }));
+        }
+    }, [curveConfig.depth]);
+
+    useEffect(() => {
+        const transitDuration = Number(
+            (curveConfig.ingressDuration + curveConfig.flatDuration + curveConfig.egressDuration).toFixed(2)
+        );
+        if (Number.isFinite(transitDuration) && Math.abs(transitDuration - observation.durationHours) > 0.01) {
+            setObservation((prev) => ({ ...prev, durationHours: transitDuration }));
+        }
+    }, [curveConfig.ingressDuration, curveConfig.flatDuration, curveConfig.egressDuration]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-black via-slate-950 to-indigo-950 text-white px-6 py-10">
@@ -92,7 +183,7 @@ export default function LightCurveDemo() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <h2 className="text-xl font-medium">Curve Parameters</h2>
                         <span className="text-sm text-gray-400">
-                            Flux drop: {(curveConfig.depth * 100).toFixed(1)}% • Ingress: {curveConfig.ingressDuration.toFixed(2)} • Flat: {curveConfig.flatDuration.toFixed(2)} • Slope: {curveConfig.slope.toFixed(1)}
+                            Flux drop: {(curveConfig.depth * 100).toFixed(1)}% • Ingress: {curveConfig.ingressDuration.toFixed(2)} • Flat: {curveConfig.flatDuration.toFixed(2)}
                         </span>
                     </div>
                     <TransitCurveControls
@@ -101,6 +192,64 @@ export default function LightCurveDemo() {
                         onIngressChange={updateIngress}
                         onEnvelopeChange={updateEnvelope}
                     />
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">Transit depth (ppm)</span>
+                            <input
+                                type="number"
+                                min="1"
+                                value={observation.depthPpm}
+                                onChange={(event) => handleObservationChange('depthPpm', parseFloat(event.target.value))}
+                                className="rounded-lg border border-indigo-500/30 bg-slate-800 px-3 py-2"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">Transit duration (hrs)</span>
+                            <input
+                                type="number"
+                                min="0.2"
+                                step="0.05"
+                                value={observation.durationHours}
+                                onChange={(event) => handleObservationChange('durationHours', parseFloat(event.target.value))}
+                                className="rounded-lg border border-indigo-500/30 bg-slate-800 px-3 py-2"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">SNR</span>
+                            <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={observation.snr}
+                                onChange={(event) => handleObservationChange('snr', parseFloat(event.target.value))}
+                                className="rounded-lg border border-indigo-500/30 bg-slate-800 px-3 py-2"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">Orbital period (days)</span>
+                            <input
+                                type="number"
+                                min="0.1"
+                                step="0.01"
+                                value={observation.orbitalPeriodDays}
+                                onChange={(event) => handleObservationChange('orbitalPeriodDays', parseFloat(event.target.value))}
+                                className="rounded-lg border border-indigo-500/30 bg-slate-800 px-3 py-2"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm">
+                            <span className="text-gray-300 uppercase tracking-widest text-xs">Transit epoch (BKJD)</span>
+                            <input
+                                type="number"
+                                step="0.0001"
+                                value={observation.epochBkjd}
+                                onChange={(event) => handleObservationChange('epochBkjd', parseFloat(event.target.value))}
+                                className="rounded-lg border border-indigo-500/30 bg-slate-800 px-3 py-2"
+                            />
+                        </label>
+                    </div>
+                    <p className="text-xs text-indigo-200/70">
+                        Transit span (ingress + flat + egress): {(curveConfig.ingressDuration + curveConfig.flatDuration + curveConfig.egressDuration).toFixed(2)} hrs · Observation window: {(curveConfig.preTransitDuration + curveConfig.ingressDuration + curveConfig.flatDuration + curveConfig.egressDuration + curveConfig.postTransitDuration).toFixed(2)} hrs
+                    </p>
                 </section>
 
                 <section className="bg-slate-900/70 border border-indigo-400/30 rounded-2xl p-6 shadow-2xl space-y-4">
@@ -169,21 +318,28 @@ export default function LightCurveDemo() {
                         </button>
                         <button
                             onClick={() => {
-                                const randomDepth = Number((0.05 + Math.random() * 0.6).toFixed(2));
-                                const randomIngress = Number((0.05 + Math.random() * 0.25).toFixed(2));
-                                const randomFlat = Number((0.12 + Math.random() * 0.38).toFixed(2));
-                                const randomEnvelope = Number((0.2 + Math.random() * 0.8).toFixed(2));
+                                const randomDepthPpm = Number((400 + Math.random() * 19000).toFixed(1));
+                                const randomDuration = Number((0.8 + Math.random() * 4).toFixed(2));
                                 const randomSlope = Number((1 + Math.random() * 3).toFixed(1));
+                                const randomSnr = Number((80 + Math.random() * 4000).toFixed(0));
+                                const randomPeriod = Number((1 + Math.random() * 50).toFixed(2));
+                                const randomEpoch = Number((100 + Math.random() * 900).toFixed(3));
+
+                                setObservation({
+                                    depthPpm: randomDepthPpm,
+                                    durationHours: randomDuration,
+                                    snr: randomSnr,
+                                    orbitalPeriodDays: randomPeriod,
+                                    epochBkjd: randomEpoch
+                                });
+
                                 setCurveConfig((prev) => ({
                                     ...prev,
-                                    depth: randomDepth,
-                                    ingressDuration: randomIngress,
-                                    egressDuration: randomIngress,
-                                    flatDuration: randomFlat,
-                                    preTransitDuration: randomEnvelope,
-                                    postTransitDuration: randomEnvelope,
+                                    depth: Number((randomDepthPpm / 1_000_000).toFixed(6)),
                                     slope: randomSlope
                                 }));
+
+                                applyDurationTemplate(randomDuration);
                             }}
                             className="rounded-lg border border-indigo-400/40 px-4 py-2 text-sm font-medium text-indigo-200 hover:bg-indigo-500/10 transition-colors"
                         >
@@ -199,6 +355,7 @@ export default function LightCurveDemo() {
                         width={viewConfig.width}
                         height={viewConfig.height}
                         tickCount={viewConfig.tickCount}
+                        fluxTickCount={5}
                         strokeColor={viewConfig.strokeColor}
                         backgroundColor={viewConfig.backgroundColor}
                         baseline={curveConfig.baseline}
@@ -209,8 +366,16 @@ export default function LightCurveDemo() {
                         egressDuration={curveConfig.egressDuration}
                         postTransitDuration={curveConfig.postTransitDuration}
                         slope={curveConfig.slope}
+                        fluxScale={1_000_000}
+                        fluxUnit="ppm relative drop"
+                        timeUnit="hours"
+                        showNoise
+                        snr={observation.snr}
+                        timeAxisLabel="Time (hours relative to mid-transit)"
+                        fluxAxisLabel="Flux (ppm relative drop)"
                     />
                 </section>
+
             </div>
         </div>
     );
