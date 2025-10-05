@@ -10,7 +10,8 @@ const createDefaultCurve = () => ({
     ingressDuration: 0.12,
     flatDuration: 0.18,
     egressDuration: 0.12,
-    postTransitDuration: 0.35
+    postTransitDuration: 0.35,
+    slope: 2.2
 });
 
 const createDefaultView = () => ({
@@ -91,7 +92,7 @@ export default function LightCurveDemo() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <h2 className="text-xl font-medium">Curve Parameters</h2>
                         <span className="text-sm text-gray-400">
-                            Flux drop: {(curveConfig.depth * 100).toFixed(1)}% • Ingress: {curveConfig.ingressDuration.toFixed(2)} • Flat: {curveConfig.flatDuration.toFixed(2)}
+                            Flux drop: {(curveConfig.depth * 100).toFixed(1)}% • Ingress: {curveConfig.ingressDuration.toFixed(2)} • Flat: {curveConfig.flatDuration.toFixed(2)} • Slope: {curveConfig.slope.toFixed(1)}
                         </span>
                     </div>
                     <TransitCurveControls
@@ -172,6 +173,7 @@ export default function LightCurveDemo() {
                                 const randomIngress = Number((0.05 + Math.random() * 0.25).toFixed(2));
                                 const randomFlat = Number((0.12 + Math.random() * 0.38).toFixed(2));
                                 const randomEnvelope = Number((0.2 + Math.random() * 0.8).toFixed(2));
+                                const randomSlope = Number((1 + Math.random() * 3).toFixed(1));
                                 setCurveConfig((prev) => ({
                                     ...prev,
                                     depth: randomDepth,
@@ -179,7 +181,8 @@ export default function LightCurveDemo() {
                                     egressDuration: randomIngress,
                                     flatDuration: randomFlat,
                                     preTransitDuration: randomEnvelope,
-                                    postTransitDuration: randomEnvelope
+                                    postTransitDuration: randomEnvelope,
+                                    slope: randomSlope
                                 }));
                             }}
                             className="rounded-lg border border-indigo-400/40 px-4 py-2 text-sm font-medium text-indigo-200 hover:bg-indigo-500/10 transition-colors"
@@ -205,6 +208,7 @@ export default function LightCurveDemo() {
                         flatDuration={curveConfig.flatDuration}
                         egressDuration={curveConfig.egressDuration}
                         postTransitDuration={curveConfig.postTransitDuration}
+                        slope={curveConfig.slope}
                     />
                 </section>
             </div>

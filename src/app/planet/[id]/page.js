@@ -77,7 +77,8 @@ export default function PlanetDetail({ params }) {
         ingressDuration: 0.12,
         flatDuration: 0.18,
         egressDuration: 0.12,
-        postTransitDuration: 0.35
+        postTransitDuration: 0.35,
+        slope: 2.2
     });
     const router = useRouter();
 
@@ -229,7 +230,7 @@ export default function PlanetDetail({ params }) {
                             </p>
                         </div>
                         <div className="text-sm text-gray-400 bg-gray-800/70 border border-blue-300/20 rounded-lg px-4 py-2">
-                            Current depth: {(curveConfig.depth * 100).toFixed(0)}% flux drop
+                            Current depth: {(curveConfig.depth * 100).toFixed(0)}% flux drop · Slope {curveConfig.slope.toFixed(1)}
                         </div>
                     </div>
 
@@ -252,6 +253,7 @@ export default function PlanetDetail({ params }) {
                             flatDuration={curveConfig.flatDuration}
                             egressDuration={curveConfig.egressDuration}
                             postTransitDuration={curveConfig.postTransitDuration}
+                            slope={curveConfig.slope}
                         />
                     </div>
                 </div>
