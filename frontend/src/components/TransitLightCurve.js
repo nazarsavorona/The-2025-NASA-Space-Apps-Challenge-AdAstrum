@@ -356,7 +356,13 @@ export default function TransitLightCurve({
                 backgroundColor: '#ffffff'
             }}
         >
-            <svg width={width} height={height} role="img" aria-label="Transit light curve visualization">
+            <svg
+                width={width}
+                height={height}
+                role="img"
+                aria-label="Transit light curve visualization"
+                style={{ display: 'block', margin: '0 auto' }}
+            >
                 <rect x={0} y={0} width={width} height={height} fill={backgroundColor} />
 
                 {title && (
