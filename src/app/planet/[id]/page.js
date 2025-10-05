@@ -1,6 +1,8 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import TransitLightCurve from '../../../components/TransitLightCurve';
+import TransitCurveControls from '../../../components/TransitCurveControls';
 
 const planetImages = {
     'Super Earth': 'https://images.unsplash.com/photo-1614732414444-096e5f1122d5?w=800',
@@ -68,6 +70,15 @@ const planetDetails = {
 
 export default function PlanetDetail({ params }) {
     const [planet, setPlanet] = useState(null);
+    const [curveConfig, setCurveConfig] = useState({
+        baseline: 1,
+        depth: 0.35,
+        preTransitDuration: 0.35,
+        ingressDuration: 0.12,
+        flatDuration: 0.18,
+        egressDuration: 0.12,
+        postTransitDuration: 0.35
+    });
     const router = useRouter();
 
     useEffect(() => {
@@ -78,6 +89,57 @@ export default function PlanetDetail({ params }) {
         }
         setPlanet(JSON.parse(storedPlanet));
     }, [router]);
+
+    useEffect(() => {
+        if (!planet) {
+            return;
+        }
+
+        const probabilityRaw = typeof planet.probability === 'number'
+            ? planet.probability
+            : parseFloat(planet.probability);
+        const boundedProbability = Number.isFinite(probabilityRaw)
+            ? Math.min(Math.max(probabilityRaw, 0), 1)
+            : 0.7;
+        const derivedDepthRaw = 0.15 + (1 - boundedProbability) * 0.45;
+        const derivedDepth = Number(Math.min(0.75, Math.max(0.05, derivedDepthRaw)).toFixed(2));
+
+        setCurveConfig((prev) => {
+            if (Math.abs(prev.depth - derivedDepth) < 0.01) {
+                return prev;
+            }
+            return { ...prev, depth: derivedDepth };
+        });
+    }, [planet]);
+
+    const updateValue = (key, value, boundaries = {}) => {
+        if (!Number.isFinite(value)) {
+            return;
+        }
+        const { min = 0, max } = boundaries;
+        const clamped = Math.max(min, max !== undefined ? Math.min(value, max) : value);
+        setCurveConfig((prev) => ({ ...prev, [key]: clamped }));
+    };
+
+    const updateSymmetricEnvelope = (value) => {
+        if (!Number.isFinite(value)) {
+            return;
+        }
+        const clamped = Math.max(0.05, Math.min(value, 2));
+        setCurveConfig((prev) => ({
+            ...prev,
+            preTransitDuration: clamped,
+            postTransitDuration: clamped
+        }));
+    };
+
+    const updateIngress = (value) => {
+        if (!Number.isFinite(value)) {
+            return;
+        }
+        const clamped = Math.max(0.04, Math.min(value, 0.6));
+        setCurveConfig((prev) => ({ ...prev, ingressDuration: clamped, egressDuration: clamped }));
+    };
 
     if (!planet) {
         return <div>Loading...</div>;
@@ -155,6 +217,42 @@ export default function PlanetDetail({ params }) {
                                 <span>{details.discovered}</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div className="mt-12 bg-gray-900/80 border border-blue-400/20 rounded-2xl p-8 shadow-2xl">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                        <div>
+                            <h2 className="text-2xl font-semibold">Transit Light Curve</h2>
+                            <p className="text-sm text-gray-400 mt-1">
+                                Adjust the parameters to simulate how this planet dims its host star during transit.
+                            </p>
+                        </div>
+                        <div className="text-sm text-gray-400 bg-gray-800/70 border border-blue-300/20 rounded-lg px-4 py-2">
+                            Current depth: {(curveConfig.depth * 100).toFixed(0)}% flux drop
+                        </div>
+                    </div>
+
+                    <div className="mt-6">
+                        <TransitCurveControls
+                            config={curveConfig}
+                            onValueChange={updateValue}
+                            onIngressChange={updateIngress}
+                            onEnvelopeChange={updateSymmetricEnvelope}
+                        />
+                    </div>
+
+                    <div className="mt-8">
+                        <TransitLightCurve
+                            className="bg-gradient-to-br from-gray-950 to-gray-900"
+                            baseline={curveConfig.baseline}
+                            depth={curveConfig.depth}
+                            preTransitDuration={curveConfig.preTransitDuration}
+                            ingressDuration={curveConfig.ingressDuration}
+                            flatDuration={curveConfig.flatDuration}
+                            egressDuration={curveConfig.egressDuration}
+                            postTransitDuration={curveConfig.postTransitDuration}
+                        />
                     </div>
                 </div>
             </div>
