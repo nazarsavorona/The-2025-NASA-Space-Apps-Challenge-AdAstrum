@@ -20,17 +20,30 @@ export default function ClassifyModal({ onClose }) {
     const handleClassify = async () => {
         setLoading(true);
         try {
+            const existingSessionId = typeof window !== 'undefined' ? window.localStorage.getItem('adastrumSessionId') : null;
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+
+            if (existingSessionId) {
+                headers['X-Session-Id'] = existingSessionId;
+            }
+
             const response = await fetch(`http://localhost:8000/predict`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 credentials: 'include',
                 body: JSON.stringify({
                     candidate_threshold: formData.candidate_threshold,
                     confirmed_threshold: formData.confirmed_threshold,
                 }),
             });
+            const sessionIdFromResponse = response.headers.get('x-session-id');
 
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            if (sessionIdFromResponse) {
+                window.localStorage.setItem('adastrumSessionId', sessionIdFromResponse);
+            }
             const data = await response.json();
             console.log('Prediction result:', data);
             router.push('/results');

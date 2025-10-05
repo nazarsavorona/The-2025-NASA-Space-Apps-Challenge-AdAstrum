@@ -100,7 +100,10 @@ router = APIRouter()
 @app.middleware("http")
 async def add_session_id(request: Request, call_next):
     session_id = request.cookies.get("session_id")
+    header_session_id = request.headers.get("x-session-id")
     print(session_id)
+    if not session_id and header_session_id:
+        session_id = header_session_id
     if not session_id:
         session_id = str(uuid.uuid4())
 
@@ -115,6 +118,12 @@ async def add_session_id(request: Request, call_next):
         secure=True,
         samesite="none"
     )
+    response.headers["X-Session-Id"] = session_id
+    existing_expose_headers = response.headers.get("Access-Control-Expose-Headers", "")
+    if "X-Session-Id" not in existing_expose_headers:
+        expose_headers = [h.strip() for h in existing_expose_headers.split(",") if h.strip()]
+        expose_headers.append("X-Session-Id")
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(expose_headers)
     return response
 
 

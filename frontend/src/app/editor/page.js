@@ -107,13 +107,26 @@ export default function Editor() {
             formData.append('file', originalFile);
 
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            const response = await fetch(`${API_URL}/upload`, {
+            const existingSessionId = typeof window !== 'undefined' ? window.localStorage.getItem('adastrumSessionId') : null;
+            const fetchOptions = {
                 method: 'POST',
                 body: formData,
                 credentials: 'include',
-            });
+            };
+
+            if (existingSessionId) {
+                fetchOptions.headers = {
+                    'X-Session-Id': existingSessionId,
+                };
+            }
+
+            const response = await fetch(`${API_URL}/upload`, fetchOptions);
+            const sessionIdFromResponse = response.headers.get('x-session-id');
 
             if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+            if (sessionIdFromResponse) {
+                window.localStorage.setItem('adastrumSessionId', sessionIdFromResponse);
+            }
             await storage.clearStore('csvData');
             setLoading(false);
             setShowModal(true);
