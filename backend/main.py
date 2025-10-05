@@ -249,7 +249,7 @@ async def get_result(request: Request, target_id: int):
     session_id = request.state.session_id
     print(f"get-result session id {session_id}")
     df = read_csv_to_df(results_file(session_id))
-    df = df.replace([np.inf, -np.inf], np.nan).where(pd.notnull(df), None)
+    df = df.replace([np.nan, np.inf, -np.inf], None)
     print("Reach")
     if "id" not in df.columns:
         raise HTTPException(status_code=400, detail="Results file missing 'id' column")
@@ -257,7 +257,9 @@ async def get_result(request: Request, target_id: int):
 
     if record.empty:
         raise HTTPException(status_code=404, detail="Record not found")
-    return record.iloc[0].to_dict()
+
+    target_value = record.iloc[0].to_dict()
+    return JSONResponse(content=target_value)
 
 
 @app.get("/download/")
