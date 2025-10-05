@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from joblib import load
 
+from backend.habitant import is_habitable_zone
 from planet_matching import PlanetCategoryClassifier
 
 
@@ -304,12 +305,13 @@ class ModelService:
             for p in probabilities
         ]
         planet_categories = self._assign_planet_category(features_df)
+        habitable_categories = self._assign_habitant_category(features_df)
 
-        # Create output dataframe
         result_df = df.copy()
         result_df["predicted_class"] = classes
         result_df["predicted_confidence"] = confidences
         result_df["predicted_categories"] = planet_categories
+        result_df["predicted_habitable"] = habitable_categories
         result_df["id"] = range(1, len(classes) + 1)
         result_df = result_df.replace([np.nan, np.inf, -np.inf], None)
 
@@ -320,6 +322,9 @@ class ModelService:
     def _assign_planet_category(self, df: pd.DataFrame):
         planet_classifier = PlanetCategoryClassifier()
         return planet_classifier.predict(df)['predicted_category']
+
+    def _assign_habitant_category(self, df: pd.DataFrame):
+        return is_habitable_zone(df)['predicted_habitable']
 
 
 # Global model service instance
