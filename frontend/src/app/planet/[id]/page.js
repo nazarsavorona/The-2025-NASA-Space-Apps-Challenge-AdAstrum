@@ -78,7 +78,7 @@ export default function PlanetDetail() {
     useEffect(() => {
         if (!planet) return;
 
-        const selectedTexture = select_texture(planet.predicted_category) ?? '/textures/Terrestrial/Terrestrial1.png';
+        const selectedTexture = select_texture(planet.predicted_category ?? planet.predicted_categories) ?? '/textures/Terrestrial/Terrestrial1.png';
         setTexture(selectedTexture);
 
         const pickNumber = (...keys) => {
@@ -212,7 +212,7 @@ export default function PlanetDetail() {
 
     // Get classification label
     const getClassLabel = (classValue) => {
-        const classLabels = ['False Positive', 'Candidate', 'Confirmed'];
+        const classLabels = ['Not an exoplanet', 'Candidate', 'Confirmed'];
         return classLabels[classValue] || 'Unknown';
     };
 
@@ -232,9 +232,49 @@ export default function PlanetDetail() {
 
     const planetName = planet.pl_name || planet.kepoi_name || planet.kepler_name || planet.hostname || `Planet ${planet.id}`;
     const classLabel = getClassLabel(planet.predicted_class);
-    const confidence = planet.predicted_confidence || 0;
 
-    const excludeFields = ['id', 'predicted_class', 'predicted_confidence', 'pl_name', 'kepoi_name', 'kepler_name'];
+    const parseNumber = (value) => {
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+            const parsed = parseFloat(value);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+        return undefined;
+    };
+
+    const predictedConfidence = parseNumber(planet.predicted_confidence);
+    const confirmedConfidence = parseNumber(planet.confirmed_confidence);
+    const confidenceSource = confirmedConfidence ?? predictedConfidence;
+    const confidence = confidenceSource ?? 0;
+    const confidenceDisplay = Number.isFinite(confidenceSource)
+        ? `${(confidenceSource * 100).toFixed(1)}%`
+        : 'N/A';
+
+    const predictedCategory = planet.predicted_category ?? planet.predicted_categories ?? 'Unknown';
+    const predictedHabitableValue = planet.predicted_habitable;
+    const predictedHabitable = typeof predictedHabitableValue === 'boolean'
+        ? (predictedHabitableValue ? 'Habitable' : 'Non-Habitable')
+        : (predictedHabitableValue ?? 'Unknown');
+
+    const highlightStats = [
+        { label: 'Predicted Categories', value: predictedCategory ?? 'Unknown' },
+        { label: 'Predicted Habitable', value: predictedHabitable ?? 'Unknown' }
+    ];
+
+    const excludeFields = [
+        'id',
+        'predicted_class',
+        'predicted_confidence',
+        'predicted_category',
+        'predicted_categories',
+        'predicted_habitable',
+        'confirmed_confidence',
+        'pl_name',
+        'kepoi_name',
+        'kepler_name'
+    ];
 
     const detailFields = Object.keys(planet).filter(key => !excludeFields.includes(key));
 
@@ -285,7 +325,7 @@ export default function PlanetDetail() {
                     ← Back to Results
                 </button>
 
-                <div className="grid md:grid-cols-2 gap-8">
+                <div className="grid md:grid-cols-2 gap-8 items-start">
                     <div className="bg-gray-800/60 border border-purple-800/40 rounded-lg overflow-hidden shadow-2xl">
                         <PlanetViewerComponent
                             planetData={{
@@ -303,6 +343,14 @@ export default function PlanetDetail() {
 
                     <div className="bg-gray-800/60 border border-purple-800/40 rounded-lg p-8 shadow-2xl">
                         <h1 className="text-4xl font-bold mb-4 text-purple-100">{planetName}</h1>
+                        <div className="mb-6 bg-gray-900/50 border border-purple-500/20 rounded-lg p-4 space-y-2">
+                            {highlightStats.map(({ label, value }) => (
+                                <div key={label} className="flex justify-between border-b border-purple-700/30 pb-2 last:pb-0 last:border-b-0">
+                                    <span className="text-purple-400 font-mono text-sm">{label}:</span>
+                                    <span className="text-purple-100 text-sm">{value ?? 'N/A'}</span>
+                                </div>
+                            ))}
+                        </div>
                         <div className="mb-6">
                             <span className={`inline-block px-3 py-1 rounded-full text-sm ${planet.predicted_class === 2 ? 'bg-green-600' :
                                 planet.predicted_class === 1 ? 'bg-yellow-600' :
@@ -311,7 +359,7 @@ export default function PlanetDetail() {
                                 {classLabel}
                             </span>
                             <span className="ml-2 text-purple-400">
-                                Confidence: {(confidence * 100).toFixed(1)}%
+                                Confidence: {confidenceDisplay}
                             </span>
                         </div>
 
