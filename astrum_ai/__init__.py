@@ -11,6 +11,12 @@ from .common import (
 )
 from .training import TrainConfig, train_cli, train_models
 from .inference import inference_cli
+from backend.planet_matching import (
+    FeatureRange,
+    CategoryMatch,
+    PlanetCategoryClassifier,
+    CATEGORY_SIGNATURES,
+)
 
 __all__ = [
     "FEATURE_COLUMNS",
@@ -24,4 +30,8 @@ __all__ = [
     "train_models",
     "train_cli",
     "inference_cli",
+    "FeatureRange",
+    "CategoryMatch",
+    "PlanetCategoryClassifier",
+    "CATEGORY_SIGNATURES",
 ]

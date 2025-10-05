@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import Dict
 
 import aiofiles
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, FastAPI, UploadFile, HTTPException, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -199,7 +200,7 @@ def set_hyperparams(session_id: str, hyperparams: Dict):
 
 def _filter_result_columns(df: pd.DataFrame):
     result_df = pd.DataFrame()
-    for col in ["id", "predicted_class", "predicted_confidence"]:
+    for col in ["id", "predicted_class", "predicted_confidence", "predicted_categories"]:
         if col in df.columns:
             result_df[col] = df[col].values
 
@@ -255,14 +256,19 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
 @app.get("/get-result/{target_id}/")
 async def get_result(request: Request, target_id: int):
     session_id = request.state.session_id
+    print(f"get-result session id {session_id}")
     df = read_csv_to_df(results_file(session_id))
+    df = df.replace([np.nan, np.inf, -np.inf], None)
+    print("Reach")
     if "id" not in df.columns:
         raise HTTPException(status_code=400, detail="Results file missing 'id' column")
     record = df[df["id"] == target_id]
 
     if record.empty:
         raise HTTPException(status_code=404, detail="Record not found")
-    return record.iloc[0].to_dict()
+
+    target_value = record.iloc[0].to_dict()
+    return JSONResponse(content=target_value)
 
 
 @app.get("/download/")
