@@ -105,3 +105,7 @@ stable-dreamfusion/
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+__pycache__/
+*.DS_Store
+
+/backend/dynamic
