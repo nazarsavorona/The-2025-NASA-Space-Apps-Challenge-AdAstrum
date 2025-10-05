@@ -7,7 +7,7 @@ A full-stack application for exoplanet classification, combining machine learnin
 
 - **Backend (Python/FastAPI)**: AI models and API for exoplanet classification
 - **Frontend (Next.js)**: Interactive web interface for data exploration and visualization
-- **Models**: LightGBM-based classifiers for Kepler, K2, and TESS missions
+- **Models**: LightGBM-based shared classifier covering Kepler and TOI/K2 mission formats
 
 ---
 
@@ -34,11 +34,11 @@ python train.py \
 
 Key options:
 - `--datasets-dir`: where the mission CSV files (e.g., `kepler.csv`, `k2.csv`, `tess.csv`) live.
-- `--model-dir`: output directory for LightGBM models and the shared imputer.
+- `--model-dir`: output directory for the shared LightGBM model and preprocessing bundle.
 - `--include-candidates`: include mission candidate labels during training (disabled by default).
 - `--n-splits`: number of stratified CV folds used when evaluating models (default `5`).
 
-Trained artifacts are written to `<model-dir>/<mission>_model.joblib` and `shared_imputer.joblib`.
+Trained artifacts are written to `<model-dir>/shared_model.joblib` and `shared_preprocessors.joblib`.
 
 ### Running Inference
 Use the `inference.py` wrapper to score new CSV files:
