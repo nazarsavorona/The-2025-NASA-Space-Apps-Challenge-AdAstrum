@@ -1,9 +1,8 @@
-# Dependencies
-node_modules/
-**/node_modules/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# External repositories
-stable-dreamfusion/
+# ============================================
+# PYTHON BACKEND
+# ============================================
 
 # Python
 __pycache__/
@@ -18,27 +17,6 @@ __pycache__/
 venv/
 env/
 ENV/
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Build outputs
-dist/
-build/
-*.log
-
-# Environment variables
-.env
-.env.local
-api.env
 
 # Model files (large)
 *.ckpt
@@ -59,5 +37,86 @@ data/*/
 # Exceptions - keep planet textures
 !planet-viewer/templates/*.png
 !planet-viewer/templates/*.jpg
-__pycache__/
-*.DS_Store
+
+# ============================================
+# NEXT.JS FRONTEND
+# ============================================
+
+# dependencies
+node_modules/
+**/node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+<<<<<<< HEAD
+dist/
+=======
+
+# misc
+.DS_Store
+*.pem
+>>>>>>> b7e2384 (start)
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+<<<<<<< HEAD
+*.log
+
+# ============================================
+# COMMON / SHARED
+# ============================================
+
+# Environment variables
+.env
+.env*
+.env.local
+api.env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.pem
+
+# External repositories
+stable-dreamfusion/
+
+# Vercel
+.vercel
+
+# TypeScript
+=======
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+>>>>>>> b7e2384 (start)
+*.tsbuildinfo
+next-env.d.ts
