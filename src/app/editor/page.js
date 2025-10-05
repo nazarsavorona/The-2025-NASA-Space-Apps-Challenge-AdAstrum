@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { useEffect, useState } from 'react';
+import ClassifyModal from '../../components/ClassifyModal';
 import { storage } from '../../utils/storage';
 
 export default function Editor() {
@@ -11,6 +12,7 @@ export default function Editor() {
     const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalRows, setTotalRows] = useState(0);
+    const [showModal, setShowModal] = useState(false);
     const rowsPerPage = 50;
     const router = useRouter();
 
@@ -148,7 +150,7 @@ export default function Editor() {
             formData.append('file', originalFile);
 
             try {
-                const response = await fetch("http://0.0.0.0:8001/upload/", {
+                const response = await fetch("http://localhost:8000/upload", {
                     method: "POST",
                     body: formData,
                     credentials: "include"
@@ -163,8 +165,9 @@ export default function Editor() {
 
                 // Clear original CSV data to free up space
                 await storage.clearStore('csvData');
+                setLoading(false);
+                setShowModal(true);
 
-                router.push('/classify');
             } catch (error) {
                 console.error('Error uploading file:', error);
                 alert('Error uploading file: ' + error.message);
@@ -196,26 +199,23 @@ export default function Editor() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4">
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 text-white font-mono p-8">
+            <button className="text-gray-300 hover:text-white mb-8 text-sm">
+                &lt; Back
+            </button>
             <div className="max-w-full mx-auto">
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-800 mb-2">CSV Editor</h1>
-                            <p className="text-gray-600">File: {fileName}</p>
-                            <p className="text-sm text-gray-500">
-                                Total rows: {totalRows} | Total columns: {columns.length}
-                            </p>
-                        </div>
-                        <button
-                            onClick={handleSubmit}
-                            disabled={loading}
-                            className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-gray-400 font-semibold"
-                        >
-                            Submit & Continue to Classification
-                        </button>
+                <div className="flex justify-between items-start mb-6">
+                    <div>
+                        <h1 className="text-3xl font-light tracking-wider mb-2">EXOPLANET DATA EDITOR</h1>
+                        <p className="text-gray-400 text-xs">
+                            File: exoplanets.csv | Total rows: 7 | Total columns: 8
+                        </p>
                     </div>
+                    <button className="border border-gray-400 hover:border-white px-8 py-2 text-sm">
+                        Continue
+                    </button>
                 </div>
+
 
                 <div className="bg-white rounded-lg shadow-lg p-6">
                     <div className="mb-4 flex justify-between items-center">
@@ -322,6 +322,10 @@ export default function Editor() {
                     </div>
                 </div>
             </div>
+
+            {showModal && (
+                <ClassifyModal onClose={() => setShowModal(false)} />
+            )}
         </div>
     );
 }
