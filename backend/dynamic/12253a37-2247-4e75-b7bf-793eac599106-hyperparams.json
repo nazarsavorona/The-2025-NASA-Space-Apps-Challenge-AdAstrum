@@ -1,4 +1,4 @@
 {
-    "candidate_threshold": 0.55,
-    "confirmed_threshold": 0.58
+    "candidate_threshold": 0.5,
+    "confirmed_threshold": 0.8
 }

@@ -1,9 +1,11 @@
 'use client';
+import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { useEffect, useState } from 'react';
 import ClassifyModal from '../../components/ClassifyModal';
 import { storage } from '../../utils/storage';
+import bgImage from './data_editor_bg.png';
 
 export default function Editor() {
     const [data, setData] = useState([]);
@@ -24,7 +26,6 @@ export default function Editor() {
         try {
             setLoading(true);
 
-            // Get metadata
             const metadata = await storage.getData('csvData', 'metadata');
             if (!metadata) {
                 router.push('/');
@@ -32,95 +33,46 @@ export default function Editor() {
             }
 
             setFileName(metadata.fileName);
-
-            // Reconstruct CSV from chunks
             let csvContent = '';
             for (let i = 0; i < metadata.chunksCount; i++) {
                 const chunk = await storage.getData('csvData', `chunk_${i}`);
                 csvContent += chunk;
             }
 
-            // Pre-process CSV to remove comment lines
             const lines = csvContent.split('\n');
             const cleanedLines = lines.filter(line => {
-                // Remove lines that start with # (comments)
                 const trimmedLine = line.trim();
                 return trimmedLine && !trimmedLine.startsWith('#');
             });
             const cleanedCsv = cleanedLines.join('\n');
 
-
             Papa.parse(cleanedCsv, {
                 header: true,
-                skipEmptyLines: false, // let us handle "empty rows" ourselves
-                delimiter: ",",
                 dynamicTyping: true,
                 complete: (result) => {
-                    // Remove rows that are *completely empty* (all values are null/undefined/"")
                     const filteredData = result.data.filter(row =>
-                        Object.values(row).some(value => {
-                            // keep if there is any non-empty cell
-                            if (typeof value === "number") return true; // includes 0
-                            if (typeof value === "boolean") return true; // true/false
-                            if (typeof value === "string" && value.trim() !== "") return true;
-                            return false;
-                        })
+                        Object.values(row).some(value =>
+                            (typeof value === 'string' && value.trim() !== '') ||
+                            typeof value === 'number' ||
+                            typeof value === 'boolean'
+                        )
                     );
-
                     setData(filteredData);
                     setTotalRows(filteredData.length);
-
-                    if (filteredData.length > 0) {
-                        // Keep column names exactly as they are (no trimming/cleaning)
-                        setColumns(Object.keys(filteredData[0]));
-                    }
-
+                    if (filteredData.length > 0) setColumns(Object.keys(filteredData[0]));
                     setLoading(false);
                 },
                 error: (err) => {
-                    console.error("Parse error:", err);
-                    alert("Error parsing CSV file");
+                    console.error('Parse error:', err);
+                    alert('Error parsing CSV file');
                     setLoading(false);
                 },
             });
-
         } catch (error) {
             console.error('Error loading data:', error);
             alert('Error loading data');
             router.push('/');
         }
-    };
-
-    const handleColumnNameChange = (oldName, newName) => {
-        if (!newName.trim() || oldName === newName) return;
-
-        const newData = data.map(row => {
-            const newRow = { ...row };
-            newRow[newName] = row[oldName];
-            delete newRow[oldName];
-            return newRow;
-        });
-
-        const newColumns = columns.map(col => col === oldName ? newName : col);
-        setColumns(newColumns);
-        setData(newData);
-    };
-
-    const handleDeleteColumn = (columnName) => {
-        if (columns.length === 1) {
-            alert('Cannot delete the last column');
-            return;
-        }
-
-        const newData = data.map(row => {
-            const newRow = { ...row };
-            delete newRow[columnName];
-            return newRow;
-        });
-
-        const newColumns = columns.filter(col => col !== columnName);
-        setColumns(newColumns);
-        setData(newData);
     };
 
     const handleCellEdit = (rowIndex, columnName, value) => {
@@ -129,56 +81,45 @@ export default function Editor() {
         setData(newData);
     };
 
+    const handleDeleteColumn = (columnName) => {
+        const updatedColumns = columns.filter((c) => c !== columnName);
+        const updatedData = data.map((row) => {
+            const { [columnName]: _omit, ...rest } = row;
+            return rest;
+        });
+        setColumns(updatedColumns);
+        setData(updatedData);
+    };
+
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            // Save processed data to IndexedDB
             await storage.saveData('processedData', 'data', data);
             await storage.saveData('processedData', 'columns', columns);
-
-            // Get the original file from IndexedDB
             const originalFile = await storage.getData('csvData', 'originalFile');
-
             if (!originalFile) {
-                alert('Original file not found. Please re-upload your CSV.');
+                alert('Original file not found.');
                 setLoading(false);
                 return;
             }
 
-            // Create FormData and append the file
             const formData = new FormData();
             formData.append('file', originalFile);
 
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            try {
-                const response = await fetch(`${API_URL}/upload`, {
-                    method: "POST",
-                    body: formData,
-                    credentials: "include"
-                });
+            const response = await fetch(`${API_URL}/upload`, {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+            });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-                console.log('Upload successful:', result);
-
-                // Clear original CSV data to free up space
-                await storage.clearStore('csvData');
-                setLoading(false);
-                setShowModal(true);
-
-            } catch (error) {
-                console.error('Error uploading file:', error);
-                alert('Error uploading file: ' + error.message);
-                setLoading(false);
-                return;
-            }
-
+            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+            await storage.clearStore('csvData');
+            setLoading(false);
+            setShowModal(true);
         } catch (error) {
-            console.error('Error saving data:', error);
-            alert('Error saving data: ' + error.message);
+            console.error('Error uploading file:', error);
+            alert('Error uploading file: ' + error.message);
             setLoading(false);
         }
     };
@@ -190,146 +131,135 @@ export default function Editor() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="min-h-screen flex items-center justify-center" style={{ backgroundImage: `url(${bgImage.src})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading CSV data...</p>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-400 mx-auto"></div>
+                    <p className="mt-4 text-violet-300 text-sm tracking-wide">Loading CSV data...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 text-white font-mono p-8">
-            <button className="text-gray-300 hover:text-white mb-8 text-sm">
-                &lt; Back
-            </button>
+        <div className="min-h-screen text-gray-100 p-8 font-mono relative" style={{ backgroundImage: `url(${bgImage.src})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+            <button className="text-violet-400 hover:text-violet-200 mb-8 text-sm transition cursor-pointer">&lt; Back</button>
+
             <div className="max-w-full mx-auto">
-                <div className="flex justify-between items-start mb-6">
+                <div className="flex justify-between items-start mb-8">
                     <div>
-                        <h1 className="text-3xl font-light tracking-wider mb-2">EXOPLANET DATA EDITOR</h1>
-                        <p className="text-gray-400 text-xs">
-                            File: exoplanets.csv | Total rows: 7 | Total columns: 8
+                        <h1 className="text-3xl font-light tracking-widest text-white drop-shadow-md mb-1">
+                            EXOPLANET DATA EDITOR
+                        </h1>
+                        <p className="text-violet-400 text-xs tracking-wide">
+                            File: {fileName} | Total rows: {totalRows} | Total columns: {columns.length}
                         </p>
                     </div>
+
                     <button
-                        className="border border-gray-400 hover:border-white px-8 py-2 text-sm "
                         onClick={handleSubmit}
+                        className="border cursor-pointer border-white-500 hover:bg-violet-600/20 text-white-300 hover:text-white transition-all px-8 py-2 rounded-md shadow-md"
                     >
                         Continue
                     </button>
                 </div>
 
+                <div className="from-gray-900/60 to-gray-950/60 border border-violet-800/40 shadow-2xl">
 
-                <div className="bg-white rounded-lg shadow-lg p-6">
-                    <div className="mb-4 flex justify-between items-center">
-                        <div className="text-sm text-gray-600">
-                            Showing rows {startIndex + 1} to {Math.min(endIndex, totalRows)} of {totalRows}
-                        </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                            <thead className="sticky top-0 z-10">
+                                <tr className="border-b border-violet-900/60">
+                                    <th className="px-3 py-3 text-left text-xs font-semibold text-violet-300 uppercase tracking-wider border-r border-violet-800/40 bg-violet-950/60">
+                                        #
+                                    </th>
+                                    {columns.map((col, idx) => (
+                                        <th
+                                            key={idx}
+                                            className="px-3 py-3 text-left text-xs font-semibold text-violet-200 uppercase tracking-wider border-r border-violet-900/40 min-w-[150px]"
+                                        >
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-1">
+                                                    <span>{col}</span>
+                                                    <button
+                                                        onClick={() => handleDeleteColumn(col)}
+                                                        title="Delete column"
+                                                        className="p-0.5 text-violet-400 hover:text-red-400 transition"
+                                                    >
+                                                        <Trash2 className="w-3 h-3" />
+                                                    </button>
+                                                    <div className="flex flex-col text-violet-400">
+                                                        <ChevronUp className="w-3 h-3 -mb-1" />
+                                                        <ChevronDown className="w-3 h-3" />
+                                                    </div>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search"
+                                                    className="w-full bg-transparent border border-white-800 px-2 py-1 text-xs text-white placeholder-white-500 focus:outline-none focus:border-violet-400 rounded"
+                                                />
+                                            </div>
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-violet-900/50">
+                                {currentData.map((row, rowIdx) => (
+                                    <tr
+                                        key={startIndex + rowIdx}
+                                        className="hover:bg-violet-900/20 transition"
+                                    >
+                                        <td className="px-3 py-2 text-sm text-white-400 border-r border-violet-900/40 bg-violet-950/40 font-medium">
+                                            {startIndex + rowIdx + 1}
+                                        </td>
+                                        {columns.map((col, colIdx) => (
+                                            <td
+                                                key={colIdx}
+                                                className="px-3 py-2 text-sm text-white-100 border-r border-violet-900/40 min-w-[150px]"
+                                            >
+                                                <input
+                                                    type="text"
+                                                    value={row[col] || ''}
+                                                    onChange={(e) =>
+                                                        handleCellEdit(startIndex + rowIdx, col, e.target.value)
+                                                    }
+                                                    className="w-full px-2 py-1 border-0 bg-transparent text-violet-100 focus:outline-none focus:bg-violet-950/50 focus:border focus:border-violet-700 rounded transition"
+                                                />
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
 
-                        <div className="flex gap-2 items-center">
+                    <div className="mt-6 flex justify-between items-center text-sm text-violet-300">
+                        <span>
+                            Showing {startIndex + 1}-{Math.min(endIndex, totalRows)} of {totalRows}
+                        </span>
+                        <div className="flex items-center gap-3">
                             <button
                                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                 disabled={currentPage === 1}
-                                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                className="px-4 py-1 rounded border border-violet-600 text-violet-300 hover:bg-violet-600/20 disabled:opacity-40"
                             >
-                                ← Previous
+                                ← Prev
                             </button>
-                            <span className="px-4 py-2 bg-gray-100 rounded">
-                                Page {currentPage} of {totalPages}
+                            <span className="px-3 py-1 bg-violet-950/50 rounded">
+                                Page {currentPage} / {totalPages}
                             </span>
                             <button
                                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                                 disabled={currentPage === totalPages}
-                                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                className="px-4 py-1 rounded border border-violet-600 text-violet-300 hover:bg-violet-600/20 disabled:opacity-40"
                             >
                                 Next →
                             </button>
                         </div>
                     </div>
-
-                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                        <div className="min-w-full inline-block align-middle">
-                            <div className="overflow-hidden">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50 sticky top-0 z-10">
-                                        <tr>
-                                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 bg-gray-100">
-                                                #
-                                            </th>
-                                            {columns.map((col, idx) => (
-                                                <th key={idx} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 min-w-[150px]">
-                                                    <div className="flex flex-col gap-1">
-                                                        <input
-                                                            type="text"
-                                                            value={col}
-                                                            onChange={(e) => handleColumnNameChange(col, e.target.value)}
-                                                            className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                            title={col}
-                                                        />
-                                                        <button
-                                                            onClick={() => handleDeleteColumn(col)}
-                                                            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </div>
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {currentData.map((row, rowIdx) => (
-                                            <tr key={startIndex + rowIdx} className="hover:bg-gray-50">
-                                                <td className="px-3 py-2 text-sm text-gray-500 border-r border-gray-200 bg-gray-50 font-medium">
-                                                    {startIndex + rowIdx + 1}
-                                                </td>
-                                                {columns.map((col, colIdx) => (
-                                                    <td key={colIdx} className="px-3 py-2 text-sm text-gray-900 border-r border-gray-200 min-w-[150px]">
-                                                        <input
-                                                            type="text"
-                                                            value={row[col] || ''}
-                                                            onChange={(e) => handleCellEdit(startIndex + rowIdx, col, e.target.value)}
-                                                            className="w-full px-2 py-1 border-0 bg-transparent focus:outline-none focus:bg-white focus:border focus:border-blue-500 focus:rounded"
-                                                            title={row[col] || ''}
-                                                        />
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-4 flex justify-between items-center">
-                        <div className="text-sm text-gray-500">
-                            <strong>Tip:</strong> Use horizontal scroll to see all columns. Click on any cell to edit.
-                        </div>
-                        <div className="flex gap-2">
-                            <select
-                                value={rowsPerPage}
-                                onChange={(e) => {
-                                    const newRowsPerPage = parseInt(e.target.value);
-                                    setCurrentPage(1);
-                                    // You would need to add state for rowsPerPage if you want this to work
-                                }}
-                                className="px-3 py-1 border rounded text-sm"
-                                disabled
-                            >
-                                <option value="25">25 rows</option>
-                                <option value="50">50 rows</option>
-                                <option value="100">100 rows</option>
-                            </select>
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            {showModal && (
-                <ClassifyModal onClose={() => setShowModal(false)} />
-            )}
+            {showModal && <ClassifyModal onClose={() => setShowModal(false)} />}
         </div>
     );
 }
