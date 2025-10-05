@@ -269,7 +269,7 @@ export default function PlanetDetail() {
         };
         console.log("Category" + category);
         const tList = textures[category];
-        if (!tList) return null;
+        if (!tList) return "/textures/Terrestrial/Martian.png";
         const randomIndex = Math.floor(Math.random() * tList.length);
         console.log(randomIndex);
         console.log(tList[randomIndex]);
@@ -292,7 +292,7 @@ export default function PlanetDetail() {
                             planetData={{
                                 name: 'Earth',
                                 radius: 5,
-                                textureUrl: texture,
+                                textureUrl: '/textures/Terrestrial/Terrestrial1.png',
                                 hasAtmosphere: true,
                                 hasRings: false,
                                 moons: [
