@@ -149,8 +149,9 @@ export default function Editor() {
             const formData = new FormData();
             formData.append('file', originalFile);
 
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
             try {
-                const response = await fetch("http://localhost:8000/upload", {
+                const response = await fetch(`${API_URL}/upload`, {
                     method: "POST",
                     body: formData,
                     credentials: "include"
@@ -211,7 +212,10 @@ export default function Editor() {
                             File: exoplanets.csv | Total rows: 7 | Total columns: 8
                         </p>
                     </div>
-                    <button className="border border-gray-400 hover:border-white px-8 py-2 text-sm">
+                    <button
+                        className="border border-gray-400 hover:border-white px-8 py-2 text-sm "
+                        onClick={handleSubmit}
+                    >
                         Continue
                     </button>
                 </div>

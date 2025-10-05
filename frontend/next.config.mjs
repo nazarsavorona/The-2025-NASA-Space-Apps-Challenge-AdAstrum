@@ -13,7 +13,7 @@ const buildCsp = () => {
     "img-src 'self' data: https://images.unsplash.com",
     "font-src 'self'",
     isDev
-      ? "connect-src 'self' ws://localhost:* ws://127.0.0.1:*"
+      ? "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*"
       : "connect-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     `script-src ${scriptSources.join(' ')}`,
