@@ -8,7 +8,7 @@ export default function PlanetViewer() {
                     planetData={{
                         name: 'Earth',
                         radius: 5,
-                        textureUrl: '/textures/earth.jpg',
+                        textureUrl: '/textures/Terrestrial1.png',
                         hasAtmosphere: true,
                         hasRings: false,
                         moons: [
