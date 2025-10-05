@@ -27,8 +27,8 @@ A complete API endpoint has been implemented for the exoplanet classification AI
 Main service for working with ML models:
 
 **`ModelService` Class:**
-- Loading trained models (Kepler, K2, TESS)
-- Loading shared imputer for handling missing values
+- Loading the shared LightGBM model used across mission formats
+- Loading dataset-specific preprocessing pipelines for handling missing values and scaling
 - Data transformation from various formats to standardized features
 - `predict(df, format, hyperparams)` method - main prediction method
 
