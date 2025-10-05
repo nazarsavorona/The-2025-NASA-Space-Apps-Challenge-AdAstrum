@@ -3,12 +3,20 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Dict
+
+import numpy as np
 import pandas as pd
 from joblib import load
 
-from .common import FEATURE_COLUMNS, MISSION_SPECS, MissionSpec, iter_csv_records, safe_float
-
-SHARED_IMPUTER_FILENAME = "shared_imputer.joblib"
+from .common import (
+    FEATURE_COLUMNS,
+    MODEL_FILENAME,
+    MISSION_SPECS,
+    PREPROCESSOR_FILENAME,
+    MissionSpec,
+    iter_csv_records,
+    safe_float,
+)
 
 
 def resolve_spec(name: str) -> MissionSpec:
@@ -61,25 +69,45 @@ def run_inference(
 
     spec = resolve_spec(dataset)
 
-    model_path = model_dir / f"{spec.name}_model.joblib"
-    imputer_path = model_dir / SHARED_IMPUTER_FILENAME
+    model_path = model_dir / MODEL_FILENAME
+    preprocessor_path = model_dir / PREPROCESSOR_FILENAME
 
     if not model_path.exists():
-        raise FileNotFoundError(f"Model artifact not found at '{model_path}'. Train models before inference.")
-    if not imputer_path.exists():
         raise FileNotFoundError(
-            f"Shared imputer artifact not found at '{imputer_path}'. Train models before inference."
+            f"Shared model artifact not found at '{model_path}'. Train models before inference."
+        )
+    if not preprocessor_path.exists():
+        raise FileNotFoundError(
+            f"Preprocessing bundle not found at '{preprocessor_path}'. Train models before inference."
         )
 
     model = load(model_path)
-    imputer = load(imputer_path)
+    bundle = load(preprocessor_path)
+
+    pipelines = bundle.get("pipelines", {})
+    type_to_id = bundle.get("type_to_id", {})
+    dataset_type = spec.dataset_type
+    if dataset_type not in pipelines:
+        raise KeyError(
+            f"No preprocessing pipeline available for dataset type '{dataset_type}'."
+        )
+    if dataset_type not in type_to_id:
+        raise KeyError(
+            f"Dataset type '{dataset_type}' missing in shared model metadata."
+        )
+
+    pipeline = pipelines[dataset_type]
+    dataset_type_id = type_to_id[dataset_type]
 
     raw_frame = pd.read_csv(csv_path, comment="#")
     features_frame = load_inference_frame(csv_path, spec)
     if features_frame.empty:
         raise ValueError("No rows found in the provided CSV after parsing.")
 
-    features = imputer.transform(features_frame[FEATURE_COLUMNS])
+    feature_matrix = pipeline.transform(features_frame[FEATURE_COLUMNS])
+    type_indicator = np.full((feature_matrix.shape[0], 1), dataset_type_id, dtype=np.float32)
+    features = np.hstack([feature_matrix.astype(np.float32), type_indicator])
+
     probabilities = model.predict_proba(features)[:, 1]
 
     classes = [assign_class(p, candidate_threshold, confirmed_threshold) for p in probabilities]

@@ -13,17 +13,15 @@ pip install -r requirements.txt
 
 ### Train Models (if not already trained)
 
-Make sure you have trained models in the `../models` directory. Run from the project root:
+Make sure you have trained models in the `./assets/models` directory. Run from the project root:
 
 ```bash
-python v1.py
+python -m astrum_ai.training
 ```
 
-This will create the following model files:
-- `models/kepler_model.joblib`
-- `models/k2_model.joblib`
-- `models/toi_model.joblib`
-- `models/shared_imputer.joblib`
+This will create the following artifacts:
+- `models/shared_model.joblib`
+- `models/shared_preprocessors.joblib`
 
 ### Run the Server
 
@@ -81,7 +79,7 @@ Make predictions on exoplanet data provided as JSON.
 ```
 
 **Parameters:**
-- `format` (string, required): Dataset format - `"kepler"`, `"k2"`, or `"tess"`
+- `format` (string, required): Dataset format - `"kepler"`, `"k2"`, `"toi"`, or `"tess"`
 - `data` (array, required): Array of objects with mission-specific column names
 - `hyperparams` (object, optional): Prediction thresholds
   - `candidate_threshold` (float, default: 0.4): Threshold for candidate class (0-1)
@@ -124,7 +122,7 @@ Make predictions on exoplanet data uploaded as a CSV file.
 
 **Parameters (Form Data):**
 - `file` (file, required): CSV file with exoplanet data
-- `format` (string, default: "kepler"): Dataset format - `"kepler"`, `"k2"`, or `"tess"`
+- `format` (string, default: "kepler"): Dataset format - `"kepler"`, `"k2"`, `"toi"`, or `"tess"`
 - `candidate_threshold` (float, default: 0.4): Threshold for candidate class
 - `confirmed_threshold` (float, default: 0.7): Threshold for confirmed class
 
@@ -168,7 +166,7 @@ Required columns (at minimum):
 - `koi_smass` - Stellar mass (solar masses)
 - And other `koi_*` columns
 
-### K2 / TESS Format
+### K2 / TOI / TESS Format
 
 Required columns (at minimum):
 - `pl_orbper` - Orbital period (days)
@@ -204,7 +202,7 @@ data = [
 response = requests.post(
     "http://localhost:8000/api/predict/",
     json={
-        "format": "kepler",
+    "format": "kepler",
         "data": data,
         "hyperparams": {
             "candidate_threshold": 0.4,
