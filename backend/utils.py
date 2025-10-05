@@ -76,7 +76,20 @@ def clear_dynamic_folder():
 
 def save_as_csv(file: str, df : pd.DataFrame):
     path = Path(file)
+    path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
 
 def read_csv_to_df(file: str):
-    return pd.read_csv(Path(file))
+    path = Path(file)
+    if not path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Results file not found for current session"
+        )
+    try:
+        return pd.read_csv(path)
+    except Exception as exs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to read results file: {exs}"
+        )

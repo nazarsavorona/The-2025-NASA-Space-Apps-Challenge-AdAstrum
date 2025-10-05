@@ -58,7 +58,6 @@ export default function PlanetDetail() {
 
                     const detailedData = await response.json();
                     setPlanet(detailedData);
-                    setTexture(select_texture(detailedData['predicted_category']));
                     // Save for quick back/forward navigation
                     await storage.saveData('results', 'selectedPlanet', detailedData);
                     setLoading(false);
@@ -78,6 +77,9 @@ export default function PlanetDetail() {
 
     useEffect(() => {
         if (!planet) return;
+
+        const selectedTexture = select_texture(planet.predicted_category) ?? '/textures/Terrestrial/Terrestrial1.png';
+        setTexture(selectedTexture);
 
         const pickNumber = (...keys) => {
             for (const key of keys) {
@@ -267,12 +269,9 @@ export default function PlanetDetail() {
                 "/textures/Terrestrial/Venusian.png",
             ],
         };
-        console.log("Category" + category);
         const tList = textures[category];
         if (!tList) return null;
         const randomIndex = Math.floor(Math.random() * tList.length);
-        console.log(randomIndex);
-        console.log(tList[randomIndex]);
         return tList[randomIndex];
     }
 
@@ -295,13 +294,9 @@ export default function PlanetDetail() {
                                 textureUrl: texture,
                                 hasAtmosphere: true,
                                 hasRings: false,
-                                moons: [
-                                    { size: 1, distance: 10, speed: 0.5, color: 0xaaaaaa },
-                                ],
                             }}
                             options={{
                                 autoRotate: true,
-                                showStars: true,
                             }}
                         />
                     </div>

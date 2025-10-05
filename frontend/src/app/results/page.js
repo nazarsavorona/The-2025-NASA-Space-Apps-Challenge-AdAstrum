@@ -42,8 +42,16 @@ export default function Results() {
     const handleRowClick = async (planet) => {
         try {
             // Make GET request to fetch detailed data
+            const existingSessionId = typeof window !== 'undefined' ? window.localStorage.getItem('adastrumSessionId') : null;
+            const headers = {};
+
+            if (existingSessionId) {
+                headers['X-Session-Id'] = existingSessionId;
+            }
+
             const response = await fetch(`http://localhost:8000/get-result/${planet.id}`, {
                 method: 'GET',
+                headers,
                 credentials: 'include',
             });
 

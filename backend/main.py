@@ -112,12 +112,13 @@ async def add_session_id(request: Request, call_next):
 
     response: Response = await call_next(request)
 
+    is_https = request.url.scheme == "https"
     response.set_cookie(
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=True,
-        samesite="none"
+        secure=is_https,
+        samesite="none" if is_https else "lax"
     )
     response.headers["X-Session-Id"] = session_id
     existing_expose_headers = response.headers.get("Access-Control-Expose-Headers", "")
@@ -216,6 +217,7 @@ def _filter_result_columns(df: pd.DataFrame):
 
 
 
+@app.post("/predict")
 @app.post("/predict/")
 async def get_result_for_file(request: Request, hyperparams: Dict):
     session_id = request.state.session_id
@@ -253,6 +255,7 @@ async def get_result_for_file(request: Request, hyperparams: Dict):
     })
 
 
+@app.get("/get-result/{target_id}")
 @app.get("/get-result/{target_id}/")
 async def get_result(request: Request, target_id: int):
     session_id = request.state.session_id
