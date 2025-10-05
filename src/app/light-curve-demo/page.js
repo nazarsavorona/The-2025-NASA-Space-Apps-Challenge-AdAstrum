@@ -19,7 +19,7 @@ const createDefaultView = () => ({
     height: 320,
     tickCount: 6,
     strokeColor: '#f6a23a',
-    backgroundColor: '#040307'
+    backgroundColor: '#ffffff'
 });
 
 const createDefaultObservation = () => ({

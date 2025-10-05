@@ -340,6 +340,14 @@ export default function TransitLightCurve({
             ? `Flux Change ${fluxUnit ? `(${fluxUnit})` : ''}`
             : `Normalized Flux${fluxUnit ? ` (${fluxUnit})` : ''}`;
 
+    const tickLabelCharacters = fluxTicks.reduce(
+        (max, tick) => Math.max(max, formatFlux(tick).length),
+        0
+    );
+    const approxTickLabelWidth = tickLabelCharacters * 6.5; // rough px estimate per character
+    const yAxisLabelX = Math.max(12, pad.left - approxTickLabelWidth - 18);
+    const yAxisLabelY = pad.top + innerHeight / 2;
+
     return (
         <div
             className={`rounded-xl border border-neutral-300 bg-white p-4 shadow-sm ${className}`.trim()}
@@ -458,12 +466,12 @@ export default function TransitLightCurve({
                 <path d={modelPath} fill="none" stroke={strokeColor} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
 
                 <text
-                    x={pad.left / 2}
-                    y={pad.top + innerHeight / 2}
+                    x={yAxisLabelX}
+                    y={yAxisLabelY}
                     fill={labelColor}
                     fontSize={13}
                     fontFamily="sans-serif"
-                    transform={`rotate(-90 ${pad.left / 2} ${pad.top + innerHeight / 2})`}
+                    transform={`rotate(-90 ${yAxisLabelX} ${yAxisLabelY})`}
                     textAnchor="middle"
                 >
                     {resolvedFluxAxisLabel}
